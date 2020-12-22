@@ -56,11 +56,23 @@ func main() {
 	flag.IntVar(&n, "n", 50, "The number of random words which constitute the test.")
 	flag.BoolVar(&csvMode, "csv", false, "Print the test results to stdout in the form <cpm>,<wpm>,<accuracy>.")
 	flag.Usage = func() {
-		fmt.Println("\033[0;1mUsage:\033[0m\n")
-		fmt.Println("\033[0;1mKeybindings:\033[0m")
-		fmt.Println("  <esc> Restarts the test")
-		fmt.Println("  <C-c> Terminated tt\n")
-		fmt.Println("\033[0;1mOptions:\033[0m")
+		fmt.Println(`Usage: tt [options]
+
+  By default tt creates a test consisting of 50 random words. Aribitrary text can also be piped directly into the program to create a custom test.
+  
+  E.G
+  
+  shuf -n 40 /etc/dictionaries-common/words|tr '\n' ' '|fold -s -w 80|tt
+  
+  Note that linebreaks are determined exclusively by the input.
+  
+Keybindings:
+  <esc> Restarts the test
+  <C-c> Terminated tt
+  <C-backspace> Deletes the previous word
+  
+Options:`)
+
 		flag.PrintDefaults()
 	}
 	flag.Parse()
