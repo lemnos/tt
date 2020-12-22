@@ -58,7 +58,7 @@ func main() {
 	flag.Usage = func() {
 		fmt.Println(`Usage: tt [options]
 
-  By default tt creates a test consisting of 50 random words. Aribitrary text can also be piped directly into the program to create a custom test.
+  By default tt creates a test consisting of 50 random words. Arbitrary text can also be piped directly into the program to create a custom test.
   
   E.G
   
@@ -68,7 +68,7 @@ func main() {
   
 Keybindings:
   <esc> Restarts the test
-  <C-c> Terminated tt
+  <C-c> Terminates tt
   <C-backspace> Deletes the previous word
   
 Options:`)
