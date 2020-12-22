@@ -16,7 +16,7 @@ or
 `go get github.com/lemnos/tt` if you have $GOPATH/bin in your $PATH
 
 
-Best served with on a terminal with truecolor and cursor shape support (e.g urxvt, kitty, iterm)
+Best served on a terminal with truecolor and cursor shape support (e.g urxvt, kitty, iterm)
 
 # Usage
 
@@ -27,11 +27,12 @@ Custom text can be supplied by piping aribirary text to the program.
 
 E.G
 
-- `shuf -n 40 /etc/dictionaries-common/words|fold -s -w 80|tt` produces a test consisting of 40 random words drawn from /etc/dictionaries-common/words.
+- `shuf -n 40 /etc/dictionaries-common/words|tr '\n' ' '|fold -s -w 80|tt` produces a test consisting of 40 random words drawn from `/etc/dictionaries-common/words`.
 
 Note that line breaks are exclusively determined by the input.
 
-Pressing escape at any point restarts the test.
+- Pressing `escape` at any point restarts the test.
+- `C-c` exits the test.
 
 # Configuration
 
