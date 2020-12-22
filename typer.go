@@ -100,6 +100,32 @@ func (t *typer) start(s string, onStart func()) (int, int, bool) {
 		t.Scr.Show()
 	}
 
+	deleteWord := func() {
+		t.highlight(text, idx, t.backgroundStyle, t.backgroundStyle)
+
+		if idx == 0 {
+			return
+		}
+
+		idx--
+
+		for idx > 0 && (text[idx].c == ' ' || text[idx].c == '\n') {
+			text[idx].style = t.backgroundStyle
+			idx--
+		}
+
+		for idx > 0 && text[idx].c != ' ' && text[idx].c != '\n' {
+			text[idx].style = t.backgroundStyle
+			idx--
+		}
+
+		if text[idx].c == ' ' || text[idx].c == '\n' {
+			idx++
+		}
+
+		t.highlight(text, idx, t.currentWordStyle, t.nextWordStyle)
+	}
+
 	for {
 		t.highlight(text, idx, t.currentWordStyle, t.nextWordStyle)
 		redraw()
@@ -128,49 +154,32 @@ func (t *typer) start(s string, onStart func()) (int, int, bool) {
 				return -1, -1, false
 			case tcell.KeyCtrlL:
 				t.Scr.Sync()
-			case tcell.KeyCtrlH: //Control+backspace
-				t.highlight(text, idx, t.backgroundStyle, t.backgroundStyle)
+			case tcell.KeyCtrlH:
+				deleteWord()
 
-				if idx == 0 {
-					break
-				}
-
-				idx--
-
-				for idx > 0 && (text[idx].c == ' ' || text[idx].c == '\n') {
-					text[idx].style = t.backgroundStyle
-					idx--
-				}
-
-				for idx > 0 && text[idx].c != ' ' && text[idx].c != '\n' {
-					text[idx].style = t.backgroundStyle
-					idx--
-				}
-
-				if text[idx].c == ' ' || text[idx].c == '\n' {
-					idx++
-				}
-
-				t.highlight(text, idx, t.currentWordStyle, t.nextWordStyle)
 			case tcell.KeyBackspace2:
-				t.highlight(text, idx, t.backgroundStyle, t.backgroundStyle)
+				if ev.Modifiers() == tcell.ModAlt {
+					deleteWord()
+				} else {
+					t.highlight(text, idx, t.backgroundStyle, t.backgroundStyle)
 
-				if idx == 0 {
-					break
-				}
+					if idx == 0 {
+						break
+					}
 
-				if idx < len(text) {
-					text[idx].style = t.backgroundStyle
-				}
+					if idx < len(text) {
+						text[idx].style = t.backgroundStyle
+					}
 
-				idx--
-
-				for idx > 0 && text[idx].c == '\n' {
-					text[idx].style = t.backgroundStyle
 					idx--
-				}
 
-				t.highlight(text, idx, t.currentWordStyle, t.nextWordStyle)
+					for idx > 0 && text[idx].c == '\n' {
+						text[idx].style = t.backgroundStyle
+						idx--
+					}
+
+					t.highlight(text, idx, t.currentWordStyle, t.nextWordStyle)
+				}
 			case tcell.KeyRune:
 				if idx < len(text) {
 					switch {
