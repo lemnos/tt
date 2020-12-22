@@ -54,7 +54,15 @@ func main() {
 	var csvMode bool
 
 	flag.IntVar(&n, "n", 50, "The number of random words which constitute the test.")
-	flag.BoolVar(&csvMode, "csv", false, "Print the output to stdout in the format <cpm>,<wpm>,<accuracy>.")
+	flag.BoolVar(&csvMode, "csv", false, "Print the test results to stdout in the form <cpm>,<wpm>,<accuracy>.")
+	flag.Usage = func() {
+		fmt.Println("\033[0;1mUsage:\033[0m\n")
+		fmt.Println("\033[0;1mKeybindings:\033[0m")
+		fmt.Println("  <esc> Restarts the test")
+		fmt.Println("  <C-c> Terminated tt\n")
+		fmt.Println("\033[0;1mOptions:\033[0m")
+		flag.PrintDefaults()
+	}
 	flag.Parse()
 
 	contentFn := func() string {
