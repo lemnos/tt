@@ -7,11 +7,24 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/gdamore/tcell"
 	"github.com/mattn/go-isatty"
 )
+
+var scr tcell.Screen
+var csvMode bool
+var rawMode bool
+
+type result struct {
+	wpm      int
+	cpm      int
+	accuracy float64
+}
+
+var results []result
 
 func readConfig() map[string]string {
 	cfg := map[string]string{}
@@ -31,8 +44,20 @@ func readConfig() map[string]string {
 	return cfg
 }
 
+func exit() {
+	scr.Fini()
+
+	if csvMode {
+		for _, r := range results {
+			fmt.Printf("%d,%d,%.2f\n", r.wpm, r.cpm, r.accuracy)
+		}
+	}
+
+	os.Exit(0)
+}
+
 func showReport(scr tcell.Screen, cpm, wpm int, accuracy float64) {
-	report := fmt.Sprintf("CPM: %d\nWPM: %d\nAccuracy: %.2f%%\n", cpm, wpm, accuracy)
+	report := fmt.Sprintf("WPM: %d\nCPM: %d\nAccuracy: %.2f%%\n", wpm, cpm, accuracy)
 
 	scr.Clear()
 	drawCellsAtCenter(scr, stringToCells(report), -1)
@@ -43,18 +68,19 @@ func showReport(scr tcell.Screen, cpm, wpm int, accuracy float64) {
 		if key, ok := scr.PollEvent().(*tcell.EventKey); ok && key.Key() == tcell.KeyEscape {
 			return
 		} else if ok && key.Key() == tcell.KeyCtrlC {
-			scr.Fini()
-			os.Exit(0)
+			exit()
 		}
 	}
 }
 
 func main() {
 	var n int
-	var csvMode bool
+	var contentFn func() []string
+	var err error
 
 	flag.IntVar(&n, "n", 50, "The number of random words which constitute the test.")
-	flag.BoolVar(&csvMode, "csv", false, "Print the test results to stdout in the form <cpm>,<wpm>,<accuracy>.")
+	flag.BoolVar(&csvMode, "csv", false, "Print the test results to stdout in the form <wpm>,<cpm>,<accuracy>.")
+	flag.BoolVar(&rawMode, "raw", false, "Don't reflow text or show one paragraph at a time.")
 	flag.Usage = func() {
 		fmt.Println(`Usage: tt [options]
 
@@ -77,22 +103,30 @@ Options:`)
 	}
 	flag.Parse()
 
-	contentFn := func() string {
-		return randomText(n)
-	}
-
 	if !isatty.IsTerminal(os.Stdin.Fd()) {
 		b, err := ioutil.ReadAll(os.Stdin)
 		if err != nil {
 			panic(err)
 		}
 
-		contentFn = func() string {
-			return string(b)
+		if rawMode {
+			contentFn = func() []string { return []string{string(b)} }
+		} else {
+			s := strings.Replace(string(b), "\r", "", -1)
+			s = regexp.MustCompile("\n\n+").ReplaceAllString(s, "\n\n")
+			content := strings.Split(strings.Trim(s, "\n"), "\n\n")
+
+			for i, _ := range content {
+				content[i] = strings.Replace(wordWrap(strings.Trim(content[i], " "), 80), "\n", " \n", -1)
+			}
+
+			contentFn = func() []string { return content }
 		}
+	} else {
+		contentFn = func() []string { return []string{randomText(n)} }
 	}
 
-	scr, err := tcell.NewScreen()
+	scr, err = tcell.NewScreen()
 	if err != nil {
 		panic(err)
 	}
@@ -100,8 +134,6 @@ Options:`)
 	if err := scr.Init(); err != nil {
 		panic(err)
 	}
-
-	defer scr.Fini()
 
 	fgcol := newTcellColor("#8C8C8C")
 	bgcol := newTcellColor("#282828")
@@ -135,20 +167,18 @@ Options:`)
 
 	for {
 		scr.Clear()
-		nerrs, ncorrect, t, completed := typer.Start([]string{contentFn()})
-		if completed {
+		nerrs, ncorrect, t, exitKey := typer.Start(contentFn())
 
+		switch exitKey {
+		case 0:
 			cpm := int(float64(ncorrect) / (float64(t) / 60E9))
 			wpm := cpm / 5
 			accuracy := float64(ncorrect) / float64(nerrs+ncorrect) * 100
 
-			if csvMode {
-				scr.Fini()
-				fmt.Printf("%d,%d,%.2f\n", cpm, wpm, accuracy)
-				return
-			}
-
+			results = append(results, result{wpm, cpm, accuracy})
 			showReport(scr, cpm, wpm, accuracy)
+		case tcell.KeyCtrlC:
+			exit()
 		}
 	}
 }

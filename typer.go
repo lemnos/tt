@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/gdamore/tcell"
@@ -36,49 +35,50 @@ func NewTyper(scr tcell.Screen, fgcol, bgcol, hicol, hicol2, hicol3, errcol tcel
 	}
 }
 
-func (t *typer) highlight(text []cell, idx int, currentWordStyle, nextWorkStyle tcell.Style) {
-	for ; idx < len(text) && text[idx].c != ' '; idx++ {
+func (t *typer) highlight(text []cell, idx int, currentWordStyle, nextWordStyle tcell.Style) {
+	for ; idx < len(text) && text[idx].c != ' ' && text[idx].c != '\n'; idx++ {
 		text[idx].style = currentWordStyle
 	}
 
-	for ; idx < len(text) && text[idx].c == ' '; idx++ {
+	for ; idx < len(text) && (text[idx].c == ' ' || text[idx].c == '\n'); idx++ {
 	}
 
-	for ; idx < len(text) && text[idx].c != ' '; idx++ {
-		text[idx].style = nextWorkStyle
+	for ; idx < len(text) && text[idx].c != ' ' && text[idx].c != '\n'; idx++ {
+		text[idx].style = nextWordStyle
 	}
 }
 
-func (t *typer) Start(text []string) (nerrs, ncorrect int, tim time.Duration, complete bool) {
+func (t *typer) Start(text []string) (nerrs, ncorrect int, tim time.Duration, exitKey tcell.Key) {
 	var startTime time.Time
 
 	for i, p := range text {
+		var e, c int
 		var fn func() = nil
+
 		if i == 0 {
 			fn = func() {
 				startTime = time.Now()
 			}
 		}
 
-		e, c, completed := t.start(p, fn)
+		e, c, exitKey = t.start(p, fn)
 
 		nerrs += e
 		ncorrect += c
 
-		if !completed {
+		if exitKey != 0 {
 			tim = time.Now().Sub(startTime)
-			complete = false
 			return
 		}
 	}
 
 	tim = time.Now().Sub(startTime)
-	complete = true
+	exitKey = 0
 
 	return
 }
 
-func (t *typer) start(s string, onStart func()) (int, int, bool) {
+func (t *typer) start(s string, onStart func()) (nerrs int, ncorrect int, exitKey tcell.Key) {
 	started := false
 	text := stringToCells(s)
 	for i, _ := range text {
@@ -145,18 +145,19 @@ func (t *typer) start(s string, onStart func()) (int, int, bool) {
 				started = true
 			}
 
-			switch ev.Key() {
-			case tcell.KeyCtrlC:
-				fmt.Printf("\033[2 q")
-				t.Scr.Fini()
-				os.Exit(1)
-			case tcell.KeyEscape:
-				return -1, -1, false
+			switch key := ev.Key(); key {
+			case tcell.KeyEscape,
+				tcell.KeyCtrlC:
+
+				nerrs = -1
+				ncorrect = -1
+				exitKey = key
+
+				return
 			case tcell.KeyCtrlL:
 				t.Scr.Sync()
 			case tcell.KeyCtrlH:
 				deleteWord()
-
 			case tcell.KeyBackspace2:
 				if ev.Modifiers() == tcell.ModAlt {
 					deleteWord()
@@ -212,7 +213,7 @@ func (t *typer) start(s string, onStart func()) (int, int, bool) {
 				}
 
 				if idx == len(text) {
-					nerrs := 0
+					nerrs = 0
 
 					for _, c := range text {
 						if c.style == t.incorrectStyle || c.style == t.incorrectSpaceStyle {
@@ -220,10 +221,11 @@ func (t *typer) start(s string, onStart func()) (int, int, bool) {
 						}
 					}
 
-					ncorrect := len(text) - nerrs
+					ncorrect = len(text) - nerrs
+					exitKey = 0
 
 					t.Scr.Clear()
-					return nerrs, ncorrect, true
+					return
 				}
 			}
 		}

@@ -263,7 +263,7 @@ func randomText(n int) string {
 		}
 	}
 
-	return wordWrap(r, 80)
+	return strings.Replace(wordWrap(r, 80), "\n", " \n", -1)
 }
 
 func stringToCells(s string) []cell {
