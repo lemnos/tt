@@ -20,7 +20,7 @@ Binaries are also available:
 ## OSX
 
 ```
-sudo curl https://raw.githubusercontent.com/lemnos/tt/master/binaries/tt-osx_amd64 /usr/local/bin/tt && sudo chmod +x /usr/local/bin/tt
+sudo curl https://raw.githubusercontent.com/lemnos/tt/master/binaries/tt-osx_amd64 -o /usr/local/bin/tt && sudo chmod +x /usr/local/bin/tt
 ```
 
 ## Linux
