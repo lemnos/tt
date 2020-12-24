@@ -76,11 +76,13 @@ func showReport(scr tcell.Screen, cpm, wpm int, accuracy float64) {
 func main() {
 	var n int
 	var contentFn func() []string
+	var oneShotMode bool
 	var err error
 
 	flag.IntVar(&n, "n", 50, "The number of random words which constitute the test.")
 	flag.BoolVar(&csvMode, "csv", false, "Print the test results to stdout in the form <wpm>,<cpm>,<accuracy>.")
 	flag.BoolVar(&rawMode, "raw", false, "Don't reflow text or show one paragraph at a time.")
+	flag.BoolVar(&oneShotMode, "o", false, "Automatically exit after a single run.")
 	flag.Usage = func() {
 		fmt.Println(`Usage: tt [options]
 
@@ -178,6 +180,9 @@ Options:`)
 			accuracy := float64(ncorrect) / float64(nerrs+ncorrect) * 100
 
 			results = append(results, result{wpm, cpm, accuracy})
+			if oneShotMode {
+				exit()
+			}
 			showReport(scr, cpm, wpm, accuracy)
 		case tcell.KeyCtrlC:
 			exit()
