@@ -84,13 +84,15 @@ func main() {
 	flag.Usage = func() {
 		fmt.Println(`Usage: tt [options]
 
-  By default tt creates a test consisting of 50 random words. Arbitrary text can also be piped directly into the program to create a custom test.
+  By default tt creates a test consisting of 50 random words. Arbitrary text
+  can also be piped directly into the program to create a custom test. Each
+  paragraph of the input is treated as a segment of the test.
   
   E.G
   
-  shuf -n 40 /etc/dictionaries-common/words|tr '\n' ' '|fold -s -w 80|tt
+  shuf -n 40 /etc/dictionaries-common/words|tt
   
-  Note that linebreaks are determined exclusively by the input.
+  Note that linebreaks are determined exclusively by the input if -raw is specified.
   
 Keybindings:
   <esc> Restarts the test

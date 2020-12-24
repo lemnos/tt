@@ -33,19 +33,26 @@ Best served on a terminal with truecolor and cursor shape support (e.g kitty, it
 
 # Usage
 
+## Options
+
 - `tt -n <num>` produces a test consisting of *num* randomly drawn english words
-- `tt -csv -n <num>` outputs the csv formatted results to STDOUT
+- `tt -csv` outputs the csv formatted results to STDOUT
 
-Custom text can be supplied by piping aribirary text to the program.
+The default behaviour is equivalent to 'tt -n 50'
 
-E.G
-
-- `shuf -n 40 /etc/dictionaries-common/words|tr '\n' ' '|fold -s -w 80|tt` produces a test consisting of 40 random words drawn from `/etc/dictionaries-common/words`.
-
-Note that line breaks are exclusively determined by the input.
+## Keys
 
 - Pressing `escape` at any point restarts the test.
 - `C-c` exits the test.
+
+Custom text can be supplied by piping aribirary text to the program. Each paragraph
+in the input is shown as a separate segment of the text.
+
+E.G
+
+- `shuf -n 40 /etc/dictionaries-common/words|tt` produces a test consisting of 40 random words drawn from `/etc/dictionaries-common/words`.
+
+Note that line breaks are determined by the input if -raw is specified.
 
 # Configuration
 
