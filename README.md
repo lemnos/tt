@@ -15,6 +15,19 @@ or
 
 `go get github.com/lemnos/tt` if you have $GOPATH/bin in your $PATH
 
+Binaries are also available:
+
+## OSX
+
+```
+sudo curl https://raw.githubusercontent.com/lemnos/tt/master/binaries/tt-osx_amd64 /usr/local/bin/tt && sudo chmod +x /usr/local/bin/tt
+```
+
+## Linux
+
+```
+sudo curl https://raw.githubusercontent.com/lemnos/tt/master/binaries/tt-linux_amd64 -o /usr/local/bin/tt && sudo chmod +x /usr/local/bin/tt
+```
 
 Best served on a terminal with truecolor and cursor shape support (e.g urxvt, kitty, iterm)
 
