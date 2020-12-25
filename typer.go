@@ -171,16 +171,13 @@ func (t *typer) start(s string, onStart func()) (nerrs int, ncorrect int, exitKe
 						break
 					}
 
-					if idx < len(text) {
-						text[idx].style = t.backgroundStyle
-					}
-
 					idx--
 
 					for idx > 0 && text[idx].c == '\n' {
-						text[idx].style = t.backgroundStyle
 						idx--
 					}
+
+					text[idx].style = t.backgroundStyle
 
 					t.highlight(text, idx, t.currentWordStyle, t.nextWordStyle)
 				}
