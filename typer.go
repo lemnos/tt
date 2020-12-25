@@ -8,8 +8,9 @@ import (
 )
 
 type typer struct {
-	Scr     tcell.Screen
-	OnStart func()
+	Scr      tcell.Screen
+	OnStart  func()
+	SkipWord bool
 
 	currentWordStyle    tcell.Style
 	nextWordStyle       tcell.Style
@@ -25,7 +26,9 @@ func NewTyper(scr tcell.Screen, fgcol, bgcol, hicol, hicol2, hicol3, errcol tcel
 		Background(bgcol)
 
 	return &typer{
-		Scr:                 scr,
+		Scr:      scr,
+		SkipWord: true,
+
 		backgroundStyle:     def,
 		correctStyle:        def.Foreground(hicol),
 		currentWordStyle:    def.Foreground(hicol2),
@@ -187,7 +190,11 @@ func (t *typer) start(s string, onStart func()) (nerrs int, ncorrect int, exitKe
 					case ev.Rune() == text[idx].c:
 						text[idx].style = t.correctStyle
 						idx++
-					case ev.Rune() == ' ':
+					case ev.Rune() == ' ' && t.SkipWord:
+						if idx > 0 && text[idx-1].c == ' ' && text[idx].c != ' ' { //Do nothing on word boundaries.
+							break
+						}
+
 						for idx < len(text) && text[idx].c != ' ' && text[idx].c != '\n' {
 							text[idx].style = t.incorrectStyle
 							idx++
@@ -197,11 +204,12 @@ func (t *typer) start(s string, onStart func()) (nerrs int, ncorrect int, exitKe
 							text[idx].style = t.incorrectSpaceStyle
 							idx++
 						}
-					case text[idx].c == ' ':
-						text[idx].style = t.incorrectSpaceStyle
-						idx++
 					default:
-						text[idx].style = t.incorrectStyle
+						if text[idx].c == ' ' {
+							text[idx].style = t.incorrectSpaceStyle
+						} else {
+							text[idx].style = t.incorrectStyle
+						}
 						idx++
 					}
 

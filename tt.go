@@ -78,11 +78,13 @@ func main() {
 	var contentFn func() []string
 	var oneShotMode bool
 	var wrapSz int
+	var noSkip bool
 	var err error
 
 	flag.IntVar(&n, "n", 50, "The number of random words which constitute the test.")
 	flag.IntVar(&wrapSz, "w", 80, "Wraps the input text at the given number of columns (ignored if -raw is present)")
 
+	flag.BoolVar(&noSkip, "noskip", false, "Disable word skipping when space is pressed.")
 	flag.BoolVar(&csvMode, "csv", false, "Print the test results to stdout in the form <wpm>,<cpm>,<accuracy>.")
 	flag.BoolVar(&rawMode, "raw", false, "Don't reflow text or show one paragraph at a time.")
 	flag.BoolVar(&oneShotMode, "o", false, "Automatically exit after a single run.")
@@ -172,6 +174,9 @@ Options:`)
 	}
 
 	typer := NewTyper(scr, fgcol, bgcol, hicol, hicol2, hicol3, errcol)
+	if noSkip {
+		typer.SkipWord = false
+	}
 
 	for {
 		scr.Clear()
