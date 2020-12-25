@@ -1,1 +1,4 @@
 bin/
+*.swp
+*.swn
+*.swo

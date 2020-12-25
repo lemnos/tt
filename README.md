@@ -48,6 +48,8 @@ The default behaviour is equivalent to 'tt -n 50'
 Custom text can be supplied by piping aribirary text to the program. Each paragraph
 in the input is shown as a separate segment of the text.
 
+See -help for additional options.
+
 E.G
 
 - `shuf -n 40 /etc/dictionaries-common/words|tt` produces a test consisting of 40 random words drawn from `/etc/dictionaries-common/words`.

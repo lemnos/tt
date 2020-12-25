@@ -77,12 +77,16 @@ func main() {
 	var n int
 	var contentFn func() []string
 	var oneShotMode bool
+	var wrapSz int
 	var err error
 
 	flag.IntVar(&n, "n", 50, "The number of random words which constitute the test.")
+	flag.IntVar(&wrapSz, "w", 80, "Wraps the input text at the given number of columns (ignored if -raw is present)")
+
 	flag.BoolVar(&csvMode, "csv", false, "Print the test results to stdout in the form <wpm>,<cpm>,<accuracy>.")
 	flag.BoolVar(&rawMode, "raw", false, "Don't reflow text or show one paragraph at a time.")
 	flag.BoolVar(&oneShotMode, "o", false, "Automatically exit after a single run.")
+
 	flag.Usage = func() {
 		fmt.Println(`Usage: tt [options]
 
@@ -121,13 +125,13 @@ Options:`)
 			content := strings.Split(strings.Trim(s, "\n"), "\n\n")
 
 			for i, _ := range content {
-				content[i] = strings.Replace(wordWrap(strings.Trim(content[i], " "), 80), "\n", " \n", -1)
+				content[i] = strings.Replace(wordWrap(strings.Trim(content[i], " "), wrapSz), "\n", " \n", -1)
 			}
 
 			contentFn = func() []string { return content }
 		}
 	} else {
-		contentFn = func() []string { return []string{randomText(n)} }
+		contentFn = func() []string { return []string{randomText(n, wrapSz)} }
 	}
 
 	scr, err = tcell.NewScreen()
