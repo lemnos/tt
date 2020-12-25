@@ -280,6 +280,28 @@ func stringToCells(s string) []cell {
 	return a[:len]
 }
 
+func drawString(scr tcell.Screen, x, y int, s string, cursorIdx int, style tcell.Style) {
+	sx := x
+
+	for i, c := range s {
+		if c == '\n' {
+			y++
+			x = sx
+		} else {
+			scr.SetContent(x, y, c, nil, style)
+			if i == cursorIdx {
+				scr.ShowCursor(x, y)
+			}
+
+			x++
+		}
+	}
+
+	if cursorIdx == len(s) {
+		scr.ShowCursor(x, y)
+	}
+}
+
 func drawCells(scr tcell.Screen, x, y int, s []cell, cursorIdx int) {
 	sx := x
 
@@ -302,16 +324,24 @@ func drawCells(scr tcell.Screen, x, y int, s []cell, cursorIdx int) {
 	}
 }
 
-func drawCellsAtCenter(scr tcell.Screen, s []cell, cursorIdx int) {
-	rows := 0
-	cols := 0
+func drawStringAtCenter(scr tcell.Screen, s string, style tcell.Style) {
+	nc, nr := calcStringDimensions(s)
+	sw, sh := scr.Size()
+
+	x := (sw - nc) / 2
+	y := (sh - nr) / 2
+
+	drawString(scr, x, y, s, -1, style)
+}
+
+func calcStringDimensions(s string) (nc, nr int) {
 	c := 0
 
 	for _, x := range s {
-		if x.c == '\n' {
-			rows++
-			if c > cols {
-				cols = c
+		if x == '\n' {
+			nr++
+			if c > nc {
+				nc = c
 			}
 			c = 0
 		} else {
@@ -319,16 +349,12 @@ func drawCellsAtCenter(scr tcell.Screen, s []cell, cursorIdx int) {
 		}
 	}
 
-	rows++
-	if c > cols {
-		cols = c
+	nr++
+	if c > nc {
+		nc = c
 	}
 
-	w, h := scr.Size()
-	x := (w - cols) / 2
-	y := (h - rows) / 2
-
-	drawCells(scr, x, y, s, cursorIdx)
+	return
 }
 
 func newTcellColor(s string) tcell.Color {

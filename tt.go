@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell"
 	"github.com/mattn/go-isatty"
@@ -57,10 +58,10 @@ func exit() {
 }
 
 func showReport(scr tcell.Screen, cpm, wpm int, accuracy float64) {
-	report := fmt.Sprintf("WPM: %d\nCPM: %d\nAccuracy: %.2f%%\n", wpm, cpm, accuracy)
+	report := fmt.Sprintf("WPM: %d\nCPM: %d\nAccuracy: %.2f%%", wpm, cpm, accuracy)
 
 	scr.Clear()
-	drawCellsAtCenter(scr, stringToCells(report), -1)
+	drawStringAtCenter(scr, report, tcell.StyleDefault)
 	scr.HideCursor()
 	scr.Show()
 
@@ -79,15 +80,17 @@ func main() {
 	var oneShotMode bool
 	var wrapSz int
 	var noSkip bool
+	var timeout int
 	var err error
 
 	flag.IntVar(&n, "n", 50, "The number of random words which constitute the test.")
-	flag.IntVar(&wrapSz, "w", 80, "Wraps the input text at the given number of columns (ignored if -raw is present)")
+	flag.IntVar(&wrapSz, "w", 80, "Wraps the input text at the given number of columns (ignored if -raw is present).")
+	flag.IntVar(&timeout, "t", -1, "Terminate the test after the given number of seconds.")
 
 	flag.BoolVar(&noSkip, "noskip", false, "Disable word skipping when space is pressed.")
 	flag.BoolVar(&csvMode, "csv", false, "Print the test results to stdout in the form <wpm>,<cpm>,<accuracy>.")
 	flag.BoolVar(&rawMode, "raw", false, "Don't reflow text or show one paragraph at a time.")
-	flag.BoolVar(&oneShotMode, "o", false, "Automatically exit after a single run.")
+	flag.BoolVar(&oneShotMode, "o", false, "Automatically exit after a single run (useful for scripts).")
 
 	flag.Usage = func() {
 		fmt.Println(`Usage: tt [options]
@@ -177,10 +180,12 @@ Options:`)
 	if noSkip {
 		typer.SkipWord = false
 	}
+	if timeout != -1 {
+		timeout *= 1E9
+	}
 
 	for {
-		scr.Clear()
-		nerrs, ncorrect, t, exitKey := typer.Start(contentFn())
+		nerrs, ncorrect, t, exitKey := typer.Start(contentFn(), time.Duration(timeout))
 
 		switch exitKey {
 		case 0:

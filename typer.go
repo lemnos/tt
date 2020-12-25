@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/gdamore/tcell"
@@ -51,39 +52,49 @@ func (t *typer) highlight(text []cell, idx int, currentWordStyle, nextWordStyle 
 	}
 }
 
-func (t *typer) Start(text []string) (nerrs, ncorrect int, tim time.Duration, exitKey tcell.Key) {
-	var startTime time.Time
+func (t *typer) Start(text []string, timeout time.Duration) (nerrs, ncorrect int, duration time.Duration, exitKey tcell.Key) {
+	timeLeft := timeout
 
 	for i, p := range text {
+		startImmediately := true
+		var d time.Duration
 		var e, c int
-		var fn func() = nil
 
 		if i == 0 {
-			fn = func() {
-				startTime = time.Now()
-			}
+			startImmediately = false
 		}
 
-		e, c, exitKey = t.start(p, fn)
+		e, c, exitKey, d = t.start(p, timeLeft, startImmediately)
 
 		nerrs += e
 		ncorrect += c
+		duration += d
+
+		if timeout != -1 {
+			timeLeft -= d
+			if timeLeft <= 0 {
+				return
+			}
+		}
 
 		if exitKey != 0 {
-			tim = time.Now().Sub(startTime)
 			return
 		}
 	}
 
-	tim = time.Now().Sub(startTime)
-	exitKey = 0
-
 	return
 }
 
-func (t *typer) start(s string, onStart func()) (nerrs int, ncorrect int, exitKey tcell.Key) {
-	started := false
+func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool) (nerrs int, ncorrect int, exitKey tcell.Key, duration time.Duration) {
+
+	var startTime time.Time
 	text := stringToCells(s)
+
+	nc, nr := calcStringDimensions(s)
+	sw, sh := scr.Size()
+	x := (sw - nc) / 2
+	y := (sh - nr) / 2
+
 	for i, _ := range text {
 		text[i].style = t.backgroundStyle
 	}
@@ -98,9 +109,31 @@ func (t *typer) start(s string, onStart func()) (nerrs int, ncorrect int, exitKe
 	idx := 0
 
 	redraw := func() {
+		if timeLimit != -1 && !startTime.IsZero() {
+			remaining := timeLimit - time.Now().Sub(startTime)
+			drawString(t.Scr, x+nc/2, y+nr+1, strconv.Itoa(int(remaining/1E9)), -1, t.backgroundStyle)
+		}
+
 		//Potentially inefficient, but seems to be good enough
-		drawCellsAtCenter(t.Scr, text, idx)
+		drawCells(t.Scr, x, y, text, idx)
+
 		t.Scr.Show()
+	}
+
+	calcStats := func() {
+		nerrs = 0
+		ncorrect = 0
+
+		for _, c := range text {
+			if c.style == t.incorrectStyle || c.style == t.incorrectSpaceStyle {
+				nerrs++
+			} else if c.style == t.correctStyle {
+				ncorrect++
+			}
+		}
+
+		exitKey = 0
+		duration = time.Now().Sub(startTime)
 	}
 
 	deleteWord := func() {
@@ -129,6 +162,30 @@ func (t *typer) start(s string, onStart func()) (nerrs int, ncorrect int, exitKe
 		t.highlight(text, idx, t.currentWordStyle, t.nextWordStyle)
 	}
 
+	tickerCloser := make(chan bool)
+
+	//Inject nil events into the main event loop at regular invervals to force an update
+	ticker := func() {
+		for {
+			select {
+			case <-tickerCloser:
+				return
+			default:
+			}
+
+			time.Sleep(time.Duration(1E8))
+			t.Scr.PostEventWait(nil)
+		}
+	}
+
+	go ticker()
+	defer close(tickerCloser)
+
+	if startImmediately {
+		startTime = time.Now()
+	}
+
+	t.Scr.Clear()
 	for {
 		t.highlight(text, idx, t.currentWordStyle, t.nextWordStyle)
 		redraw()
@@ -139,13 +196,14 @@ func (t *typer) start(s string, onStart func()) (nerrs int, ncorrect int, exitKe
 		case *tcell.EventResize:
 			t.Scr.Sync()
 			t.Scr.Clear()
-		case *tcell.EventKey:
-			if !started {
-				if onStart != nil {
-					onStart()
-				}
 
-				started = true
+			nc, nr = calcStringDimensions(s)
+			sw, sh = scr.Size()
+			x = (sw - nc) / 2
+			y = (sh - nr) / 2
+		case *tcell.EventKey:
+			if startTime.IsZero() {
+				startTime = time.Now()
 			}
 
 			switch key := ev.Key(); key {
@@ -218,21 +276,17 @@ func (t *typer) start(s string, onStart func()) (nerrs int, ncorrect int, exitKe
 				}
 
 				if idx == len(text) {
-					nerrs = 0
-
-					for _, c := range text {
-						if c.style == t.incorrectStyle || c.style == t.incorrectSpaceStyle {
-							nerrs++
-						}
-					}
-
-					ncorrect = len(text) - nerrs
-					exitKey = 0
-
-					t.Scr.Clear()
+					calcStats()
 					return
 				}
 			}
+		default: //tick
+			if timeLimit != -1 && !startTime.IsZero() && timeLimit <= time.Now().Sub(startTime) {
+				calcStats()
+				return
+			}
+
+			redraw()
 		}
 	}
 }
