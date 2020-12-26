@@ -81,7 +81,9 @@ func main() {
 	var wrapSz int
 	var noSkip bool
 	var timeout int
+	var listFlag string
 	var err error
+	var themeName string
 
 	flag.IntVar(&n, "n", 50, "The number of random words which constitute the test.")
 	flag.IntVar(&wrapSz, "w", 80, "Wraps the input text at the given number of columns (ignored if -raw is present).")
@@ -91,6 +93,8 @@ func main() {
 	flag.BoolVar(&csvMode, "csv", false, "Print the test results to stdout in the form <wpm>,<cpm>,<accuracy>.")
 	flag.BoolVar(&rawMode, "raw", false, "Don't reflow text or show one paragraph at a time.")
 	flag.BoolVar(&oneShotMode, "o", false, "Automatically exit after a single run (useful for scripts).")
+	flag.StringVar(&themeName, "theme", "", "The theme to use (overrides ~/.ttrc).")
+	flag.StringVar(&listFlag, "list", "", "-list themes prints a list of available themes.")
 
 	flag.Usage = func() {
 		fmt.Println(`Usage: tt [options]
@@ -116,6 +120,13 @@ Options:`)
 	}
 	flag.Parse()
 
+	if listFlag == "themes" {
+		for t, _ := range themes {
+			fmt.Println(t)
+		}
+		os.Exit(0)
+	}
+
 	if !isatty.IsTerminal(os.Stdin.Fd()) {
 		b, err := ioutil.ReadAll(os.Stdin)
 		if err != nil {
@@ -139,6 +150,60 @@ Options:`)
 		contentFn = func() []string { return []string{randomText(n, wrapSz)} }
 	}
 
+	cfg := readConfig()
+
+	var bgcol, fgcol, hicol, hicol2, hicol3, errcol tcell.Color
+
+	//If theme is explicitly specified as a flag
+	if themeName != "" {
+		if theme, ok := themes[themeName]; !ok {
+			fmt.Fprintf(os.Stderr, "ERROR: %s is not a valid theme (see -list themes for a list of valid options).\n", themeName)
+			os.Exit(1)
+		} else {
+			bgcol = newTcellColor(theme["bgcol"])
+			fgcol = newTcellColor(theme["fgcol"])
+			hicol = newTcellColor(theme["hicol"])
+			hicol2 = newTcellColor(theme["hicol2"])
+			hicol3 = newTcellColor(theme["hicol3"])
+			errcol = newTcellColor(theme["errcol"])
+		}
+	} else {
+		//Use the theme as a base
+		theme := themes["default"]
+		if c, ok := cfg["theme"]; ok {
+			if v, ok := themes[c]; ok {
+				theme = v
+			}
+		}
+
+		bgcol = newTcellColor(theme["bgcol"])
+		fgcol = newTcellColor(theme["fgcol"])
+		hicol = newTcellColor(theme["hicol"])
+		hicol2 = newTcellColor(theme["hicol2"])
+		hicol3 = newTcellColor(theme["hicol3"])
+		errcol = newTcellColor(theme["errcol"])
+
+		//Allow individual colours to be overriden
+		if c, ok := cfg["bgcol"]; ok {
+			bgcol = newTcellColor(c)
+		}
+		if c, ok := cfg["fgcol"]; ok {
+			fgcol = newTcellColor(c)
+		}
+		if c, ok := cfg["hicol"]; ok {
+			hicol = newTcellColor(c)
+		}
+		if c, ok := cfg["hicol2"]; ok {
+			hicol2 = newTcellColor(c)
+		}
+		if c, ok := cfg["hicol3"]; ok {
+			hicol3 = newTcellColor(c)
+		}
+		if c, ok := cfg["errcol"]; ok {
+			errcol = newTcellColor(c)
+		}
+	}
+
 	scr, err = tcell.NewScreen()
 	if err != nil {
 		panic(err)
@@ -146,34 +211,6 @@ Options:`)
 
 	if err := scr.Init(); err != nil {
 		panic(err)
-	}
-
-	fgcol := newTcellColor("#8C8C8C")
-	bgcol := newTcellColor("#282828")
-
-	hicol2 := newTcellColor("#805b13")
-	hicol3 := newTcellColor("#b4801b")
-	hicol := newTcellColor("#ffffff")
-	errcol := newTcellColor("#a10705")
-
-	cfg := readConfig()
-	if c, ok := cfg["bgcol"]; ok {
-		bgcol = newTcellColor(c)
-	}
-	if c, ok := cfg["fgcol"]; ok {
-		fgcol = newTcellColor(c)
-	}
-	if c, ok := cfg["hicol"]; ok {
-		hicol = newTcellColor(c)
-	}
-	if c, ok := cfg["hicol2"]; ok {
-		hicol2 = newTcellColor(c)
-	}
-	if c, ok := cfg["hicol3"]; ok {
-		hicol3 = newTcellColor(c)
-	}
-	if c, ok := cfg["errcol"]; ok {
-		errcol = newTcellColor(c)
 	}
 
 	typer := NewTyper(scr, fgcol, bgcol, hicol, hicol2, hicol3, errcol)
