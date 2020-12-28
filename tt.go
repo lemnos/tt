@@ -17,12 +17,12 @@ import (
 
 var scr tcell.Screen
 var csvMode bool
-var rawMode bool
 
 type result struct {
-	wpm      int
-	cpm      int
-	accuracy float64
+	wpm       int
+	cpm       int
+	accuracy  float64
+	timestamp int64
 }
 
 var results []result
@@ -45,16 +45,16 @@ func readConfig() map[string]string {
 	return cfg
 }
 
-func exit() {
+func exit(rc int) {
 	scr.Fini()
 
 	if csvMode {
 		for _, r := range results {
-			fmt.Printf("%d,%d,%.2f\n", r.wpm, r.cpm, r.accuracy)
+			fmt.Printf("%d,%d,%.2f,%d\n", r.wpm, r.cpm, r.accuracy, r.timestamp)
 		}
 	}
 
-	os.Exit(0)
+	os.Exit(rc)
 }
 
 func showReport(scr tcell.Screen, cpm, wpm int, accuracy float64) {
@@ -69,30 +69,37 @@ func showReport(scr tcell.Screen, cpm, wpm int, accuracy float64) {
 		if key, ok := scr.PollEvent().(*tcell.EventKey); ok && key.Key() == tcell.KeyEscape {
 			return
 		} else if ok && key.Key() == tcell.KeyCtrlC {
-			exit()
+			exit(1)
 		}
 	}
 }
 
 func main() {
 	var n int
-	var contentFn func() []string
+	var ngroups int
+	var contentFn func(sw, sh int) []string
+	var rawMode bool
 	var oneShotMode bool
-	var wrapSz int
+	var maxLineLen int
 	var noSkip bool
+	var noReport bool
 	var timeout int
 	var listFlag string
 	var err error
 	var themeName string
+	var showWpm bool
 
 	flag.IntVar(&n, "n", 50, "The number of random words which constitute the test.")
-	flag.IntVar(&wrapSz, "w", 80, "Wraps the input text at the given number of columns (ignored if -raw is present).")
+	flag.IntVar(&ngroups, "g", 1, "The number of groups into which the generated test is split.")
+	flag.IntVar(&maxLineLen, "w", 80, "The maximum line length in characters. (ignored if -raw is present).")
 	flag.IntVar(&timeout, "t", -1, "Terminate the test after the given number of seconds.")
 
+	flag.BoolVar(&showWpm, "showwpm", false, "Display WPM whilst typing.")
 	flag.BoolVar(&noSkip, "noskip", false, "Disable word skipping when space is pressed.")
-	flag.BoolVar(&csvMode, "csv", false, "Print the test results to stdout in the form <wpm>,<cpm>,<accuracy>.")
+	flag.BoolVar(&oneShotMode, "oneshot", false, "Automatically exit after a single run (useful for scripts).")
+	flag.BoolVar(&noReport, "noreport", false, "Don't show a report at the end of the test (useful in conjunction with -o).")
+	flag.BoolVar(&csvMode, "csv", false, "Print the test results to stdout in the form wpm,cpm,accuracy,time.")
 	flag.BoolVar(&rawMode, "raw", false, "Don't reflow text or show one paragraph at a time.")
-	flag.BoolVar(&oneShotMode, "o", false, "Automatically exit after a single run (useful for scripts).")
 	flag.StringVar(&themeName, "theme", "", "The theme to use (overrides ~/.ttrc).")
 	flag.StringVar(&listFlag, "list", "", "-list themes prints a list of available themes.")
 
@@ -134,20 +141,46 @@ Options:`)
 		}
 
 		if rawMode {
-			contentFn = func() []string { return []string{string(b)} }
+			contentFn = func(sw, sh int) []string { return []string{string(b)} }
 		} else {
-			s := strings.Replace(string(b), "\r", "", -1)
-			s = regexp.MustCompile("\n\n+").ReplaceAllString(s, "\n\n")
-			content := strings.Split(strings.Trim(s, "\n"), "\n\n")
+			contentFn = func(sw, sh int) []string {
+				wsz := maxLineLen
+				if wsz > sw {
+					wsz = sw - 8
+				}
 
-			for i, _ := range content {
-				content[i] = strings.Replace(wordWrap(strings.Trim(content[i], " "), wrapSz), "\n", " \n", -1)
+				s := strings.Replace(string(b), "\r", "", -1)
+				s = regexp.MustCompile("\n\n+").ReplaceAllString(s, "\n\n")
+				content := strings.Split(strings.Trim(s, "\n"), "\n\n")
+
+				for i, _ := range content {
+					content[i] = strings.Replace(wordWrap(strings.Trim(content[i], " "), wsz), "\n", " \n", -1)
+				}
+
+				return content
 			}
-
-			contentFn = func() []string { return content }
 		}
 	} else {
-		contentFn = func() []string { return []string{randomText(n, wrapSz)} }
+		contentFn = func(sw, sh int) []string {
+			wsz := maxLineLen
+			if wsz > sw {
+				wsz = sw - 8
+			}
+
+			if ngroups > n {
+				ngroups = n
+			}
+
+			r := make([]string, ngroups)
+			sz := n / ngroups
+			for i := 0; i < ngroups-1; i++ {
+				r[i] = randomText(sz, wsz)
+			}
+
+			r[ngroups-1] = randomText(sz+n%ngroups, wsz)
+
+			return r
+		}
 	}
 
 	cfg := readConfig()
@@ -214,29 +247,38 @@ Options:`)
 	}
 
 	typer := NewTyper(scr, fgcol, bgcol, hicol, hicol2, hicol3, errcol)
-	if noSkip {
-		typer.SkipWord = false
-	}
+	typer.SkipWord = !noSkip
+	typer.ShowWpm = showWpm
+
 	if timeout != -1 {
 		timeout *= 1E9
 	}
 
 	for {
-		nerrs, ncorrect, t, exitKey := typer.Start(contentFn(), time.Duration(timeout))
+		sw, sh := scr.Size()
+		nerrs, ncorrect, t, rc := typer.Start(contentFn(sw, sh), time.Duration(timeout))
 
-		switch exitKey {
-		case 0:
+		switch rc {
+		case TyperComplete:
 			cpm := int(float64(ncorrect) / (float64(t) / 60E9))
 			wpm := cpm / 5
 			accuracy := float64(ncorrect) / float64(nerrs+ncorrect) * 100
 
-			results = append(results, result{wpm, cpm, accuracy})
-			if oneShotMode {
-				exit()
+			results = append(results, result{wpm, cpm, accuracy, time.Now().Unix()})
+			if !noReport {
+				showReport(scr, cpm, wpm, accuracy)
 			}
-			showReport(scr, cpm, wpm, accuracy)
-		case tcell.KeyCtrlC:
-			exit()
+			if oneShotMode {
+				exit(0)
+			}
+		case TyperSigInt:
+			exit(1)
+
+		case TyperResize:
+			//Resize events restart the test, this shouldn't be a problem in the vast majority of cases
+			//and allows us to avoid baking rewrapping logic into the typer.
+
+			//TODO: implement state-preserving resize (maybe)
 		}
 	}
 }

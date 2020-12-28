@@ -2,16 +2,26 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"time"
 
 	"github.com/gdamore/tcell"
 )
 
+const (
+	TyperComplete = iota
+	TyperSigInt
+	TyperEscape
+	TyperResize
+)
+
 type typer struct {
 	Scr      tcell.Screen
 	OnStart  func()
 	SkipWord bool
+	ShowWpm  bool
+	tty      *os.File
 
 	currentWordStyle    tcell.Style
 	nextWordStyle       tcell.Style
@@ -26,9 +36,14 @@ func NewTyper(scr tcell.Screen, fgcol, bgcol, hicol, hicol2, hicol3, errcol tcel
 		Foreground(fgcol).
 		Background(bgcol)
 
+	tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
+	if err != nil {
+		panic(err)
+	}
 	return &typer{
 		Scr:      scr,
 		SkipWord: true,
+		tty:      tty,
 
 		backgroundStyle:     def,
 		correctStyle:        def.Foreground(hicol),
@@ -52,7 +67,7 @@ func (t *typer) highlight(text []cell, idx int, currentWordStyle, nextWordStyle 
 	}
 }
 
-func (t *typer) Start(text []string, timeout time.Duration) (nerrs, ncorrect int, duration time.Duration, exitKey tcell.Key) {
+func (t *typer) Start(text []string, timeout time.Duration) (nerrs, ncorrect int, duration time.Duration, rc int) {
 	timeLeft := timeout
 
 	for i, p := range text {
@@ -64,7 +79,7 @@ func (t *typer) Start(text []string, timeout time.Duration) (nerrs, ncorrect int
 			startImmediately = false
 		}
 
-		e, c, exitKey, d = t.start(p, timeLeft, startImmediately)
+		e, c, rc, d = t.start(p, timeLeft, startImmediately)
 
 		nerrs += e
 		ncorrect += c
@@ -77,7 +92,7 @@ func (t *typer) Start(text []string, timeout time.Duration) (nerrs, ncorrect int
 			}
 		}
 
-		if exitKey != 0 {
+		if rc != TyperComplete {
 			return
 		}
 	}
@@ -85,13 +100,12 @@ func (t *typer) Start(text []string, timeout time.Duration) (nerrs, ncorrect int
 	return
 }
 
-func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool) (nerrs int, ncorrect int, exitKey tcell.Key, duration time.Duration) {
-
+func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool) (nerrs int, ncorrect int, rc int, duration time.Duration) {
 	var startTime time.Time
 	text := stringToCells(s)
 
-	nc, nr := calcStringDimensions(s)
 	sw, sh := scr.Size()
+	nc, nr := calcStringDimensions(s)
 	x := (sw - nc) / 2
 	y := (sh - nr) / 2
 
@@ -99,26 +113,14 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool) 
 		text[i].style = t.backgroundStyle
 	}
 
-	fmt.Printf("\033[5 q")
+	t.tty.WriteString("\033[5 q")
 
 	//Assumes original cursor shape was a block (the one true cursor shape), there doesn't appear to be a
 	//good way to save/restore the shape if the user has changed it from the otcs.
-	defer fmt.Printf("\033[2 q")
+	defer t.tty.WriteString("\033[2 q")
 
 	t.Scr.SetStyle(t.backgroundStyle)
 	idx := 0
-
-	redraw := func() {
-		if timeLimit != -1 && !startTime.IsZero() {
-			remaining := timeLimit - time.Now().Sub(startTime)
-			drawString(t.Scr, x+nc/2, y+nr+1, strconv.Itoa(int(remaining/1E9)), -1, t.backgroundStyle)
-		}
-
-		//Potentially inefficient, but seems to be good enough
-		drawCells(t.Scr, x, y, text, idx)
-
-		t.Scr.Show()
-	}
 
 	calcStats := func() {
 		nerrs = 0
@@ -132,8 +134,30 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool) 
 			}
 		}
 
-		exitKey = 0
+		rc = TyperComplete
 		duration = time.Now().Sub(startTime)
+	}
+
+	redraw := func() {
+		if timeLimit != -1 && !startTime.IsZero() {
+			remaining := timeLimit - time.Now().Sub(startTime)
+			drawString(t.Scr, x+nc/2, y+nr+1, "      ", -1, t.backgroundStyle)
+			drawString(t.Scr, x+nc/2, y+nr+1, strconv.Itoa(int(remaining/1E9)), -1, t.backgroundStyle)
+		}
+
+		if t.ShowWpm && !startTime.IsZero() {
+			calcStats()
+			if duration > 1E7 { //Avoid flashing large numbers on test start.
+				wpm := int((float64(ncorrect) / 5) / (float64(duration) / 60E9))
+				drawString(t.Scr, x+nc/2-4, y-2, fmt.Sprintf("WPM: %-10d\n", wpm), -1, t.backgroundStyle)
+			}
+		}
+
+		//Potentially inefficient, but seems to be good enough
+
+		drawCells(t.Scr, x, y, text, idx)
+
+		t.Scr.Show()
 	}
 
 	deleteWord := func() {
@@ -173,7 +197,7 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool) 
 			default:
 			}
 
-			time.Sleep(time.Duration(1E8))
+			time.Sleep(time.Duration(5E8))
 			t.Scr.PostEventWait(nil)
 		}
 	}
@@ -194,25 +218,20 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool) 
 
 		switch ev := ev.(type) {
 		case *tcell.EventResize:
-			t.Scr.Sync()
-			t.Scr.Clear()
-
-			nc, nr = calcStringDimensions(s)
-			sw, sh = scr.Size()
-			x = (sw - nc) / 2
-			y = (sh - nr) / 2
+			rc = TyperResize
+			return
 		case *tcell.EventKey:
 			if startTime.IsZero() {
 				startTime = time.Now()
 			}
 
 			switch key := ev.Key(); key {
-			case tcell.KeyEscape,
-				tcell.KeyCtrlC:
+			case tcell.KeyCtrlC:
+				rc = TyperSigInt
 
-				nerrs = -1
-				ncorrect = -1
-				exitKey = key
+				return
+			case tcell.KeyEscape:
+				rc = TyperEscape
 
 				return
 			case tcell.KeyCtrlL:
@@ -288,5 +307,6 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool) 
 
 			redraw()
 		}
+
 	}
 }

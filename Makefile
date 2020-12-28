@@ -2,6 +2,8 @@ all:
 	go build -o bin/tt *.go
 install:
 	install -m755 bin/tt /usr/local/bin
+assets:
+	python3 tools/themegen.py | gofmt > generatedThemes.go 
 rel:
 	GOOS=darwin GOARCH=386 go build -o binaries/tt-osx_386 *.go
 	GOOS=darwin GOARCH=amd64 go build -o binaries/tt-osx_amd64 *.go
