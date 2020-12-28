@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"io/ioutil"
 	"os"
 	"strconv"
 	"time"
@@ -21,7 +23,7 @@ type typer struct {
 	OnStart  func()
 	SkipWord bool
 	ShowWpm  bool
-	tty      *os.File
+	tty      io.Writer
 
 	currentWordStyle    tcell.Style
 	nextWordStyle       tcell.Style
@@ -32,14 +34,17 @@ type typer struct {
 }
 
 func NewTyper(scr tcell.Screen, fgcol, bgcol, hicol, hicol2, hicol3, errcol tcell.Color) *typer {
+	var tty io.Writer
 	def := tcell.StyleDefault.
 		Foreground(fgcol).
 		Background(bgcol)
 
 	tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
+	//Will fail on windows, but tt is still mostly usable via tcell
 	if err != nil {
-		panic(err)
+		tty = ioutil.Discard
 	}
+
 	return &typer{
 		Scr:      scr,
 		SkipWord: true,
@@ -113,11 +118,11 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool) 
 		text[i].style = t.backgroundStyle
 	}
 
-	t.tty.WriteString("\033[5 q")
+	defer t.tty.Write([]byte("\033[5 q"))
 
 	//Assumes original cursor shape was a block (the one true cursor shape), there doesn't appear to be a
 	//good way to save/restore the shape if the user has changed it from the otcs.
-	defer t.tty.WriteString("\033[2 q")
+	defer t.tty.Write([]byte("\033[2 q"))
 
 	t.Scr.SetStyle(t.backgroundStyle)
 	idx := 0
