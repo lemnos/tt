@@ -118,7 +118,7 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool) 
 		text[i].style = t.backgroundStyle
 	}
 
-	defer t.tty.Write([]byte("\033[5 q"))
+	t.tty.Write([]byte("\033[5 q"))
 
 	//Assumes original cursor shape was a block (the one true cursor shape), there doesn't appear to be a
 	//good way to save/restore the shape if the user has changed it from the otcs.
