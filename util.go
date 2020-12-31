@@ -14,6 +14,15 @@ type cell struct {
 	style tcell.Style
 }
 
+func dbgPrintf(scr tcell.Screen, format string, args ...interface{}) {
+	for i := 0; i < 80; i++ {
+		for j := 0; j < 80; j++ {
+			scr.SetContent(i, j, ' ', nil, tcell.StyleDefault)
+		}
+	}
+	drawString(scr, 0, 0, fmt.Sprintf(format, args...), -1, tcell.StyleDefault)
+}
+
 func wordWrapBytes(s []byte, n int) {
 	sp := 0
 	sz := 0

@@ -9,18 +9,18 @@ A terminal based typing test.
 ## Linux
 
 ```
-sudo curl -L https://github.com/lemnos/tt/releases/download/0.0.1/tt-linux -o /usr/local/bin/tt && sudo chmod +x /usr/local/bin/tt
+sudo curl -L https://github.com/lemnos/tt/releases/download/0.0.2/tt-linux -o /usr/local/bin/tt && sudo chmod +x /usr/local/bin/tt
 ```
 
 ## OSX
 
 ```
-sudo curl -L https://github.com/lemnos/tt/releases/download/0.0.1/tt-osx -o /usr/local/bin/tt && sudo chmod +x /usr/local/bin/tt
+sudo curl -L https://github.com/lemnos/tt/releases/download/0.0.2/tt-osx -o /usr/local/bin/tt && sudo chmod +x /usr/local/bin/tt
 ```
 
 ## Windows
 
-There is a [windows binary](https://github.com/lemnos/tt/releases/download/0.0.1/tt.exe) but it is largely untested. Using WSL is strongly encouraged (or alternatively switching to a proper OS ;)).
+There is a [windows binary](https://github.com/lemnos/tt/releases/download/0.0.2/tt.exe) but it is largely untested. Using WSL is strongly encouraged (or alternatively switching to a proper OS ;)).
 
 ## From source
 

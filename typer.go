@@ -5,6 +5,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"runtime"
 	"strconv"
 	"time"
 
@@ -226,6 +227,11 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool) 
 			rc = TyperResize
 			return
 		case *tcell.EventKey:
+			if runtime.GOOS != "windows" && ev.Key() == tcell.KeyBackspace { //Control+backspace on unix terms
+				deleteWord()
+				continue
+			}
+
 			if startTime.IsZero() {
 				startTime = time.Now()
 			}
@@ -241,10 +247,8 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool) 
 				return
 			case tcell.KeyCtrlL:
 				t.Scr.Sync()
-			case tcell.KeyCtrlH:
-				deleteWord()
-			case tcell.KeyBackspace2:
-				if ev.Modifiers() == tcell.ModAlt {
+			case tcell.KeyBackspace, tcell.KeyBackspace2:
+				if ev.Modifiers() == tcell.ModAlt || ev.Modifiers() == tcell.ModCtrl {
 					deleteWord()
 				} else {
 					t.highlight(text, idx, t.backgroundStyle, t.backgroundStyle)
@@ -312,6 +316,5 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool) 
 
 			redraw()
 		}
-
 	}
 }
