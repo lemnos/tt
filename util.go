@@ -59,7 +59,7 @@ func init() {
 	rand.Seed(time.Now().Unix())
 }
 
-func randomText(n int, ncols int) string {
+func randomText(n int) string {
 	r := ""
 
 	for i := 0; i < n; i++ {
@@ -69,7 +69,7 @@ func randomText(n int, ncols int) string {
 		}
 	}
 
-	return strings.Replace(wordWrap(r, ncols), "\n", " \n", -1)
+	return strings.Replace(r, "\n", " \n", -1)
 }
 
 func stringToCells(s string) []cell {

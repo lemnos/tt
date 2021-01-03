@@ -50,7 +50,7 @@ text.
 ## Examples
 
  - `tt -n 10` produces a test consisting of 10 randomly drawn English words
- - `tt -n 50 -g 5` produces a test consisting of 50 randomly drawn words in 5 groups of 10 words each.
+ - `tt -n 10 -g 5` produces a test consisting of 50 randomly drawn words in 5 groups of 10 words each.
  - `tt -t 10` starts a timed test consisting of 50 words
  - `tt -theme gruvbox` Starts tt with the gruvbox theme
 

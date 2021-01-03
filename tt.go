@@ -77,7 +77,7 @@ func showReport(scr tcell.Screen, cpm, wpm int, accuracy float64) {
 func main() {
 	var n int
 	var ngroups int
-	var contentFn func(sw, sh int) []string
+	var testFn func() []string
 	var rawMode bool
 	var oneShotMode bool
 	var maxLineLen int
@@ -88,11 +88,15 @@ func main() {
 	var err error
 	var themeName string
 	var showWpm bool
+	var multiMode bool
+	var versionFlag bool
 
-	flag.IntVar(&n, "n", 50, "The number of random words which constitute the test.")
-	flag.IntVar(&ngroups, "g", 1, "The number of groups into which the generated test is split.")
+	flag.IntVar(&n, "n", 50, "The number of random words which constitute a unit of the test.")
+	flag.IntVar(&ngroups, "g", 1, "The number of groups of which a test consists.")
 	flag.IntVar(&maxLineLen, "w", 80, "The maximum line length in characters. (ignored if -raw is present).")
 	flag.IntVar(&timeout, "t", -1, "Terminate the test after the given number of seconds.")
+
+	flag.BoolVar(&versionFlag, "v", false, "Print the current version.")
 
 	flag.BoolVar(&showWpm, "showwpm", false, "Display WPM whilst typing.")
 	flag.BoolVar(&noSkip, "noskip", false, "Disable word skipping when space is pressed.")
@@ -100,6 +104,7 @@ func main() {
 	flag.BoolVar(&noReport, "noreport", false, "Don't show a report at the end of the test (useful in conjunction with -o).")
 	flag.BoolVar(&csvMode, "csv", false, "Print the test results to stdout in the form wpm,cpm,accuracy,time.")
 	flag.BoolVar(&rawMode, "raw", false, "Don't reflow text or show one paragraph at a time.")
+	flag.BoolVar(&multiMode, "multi", false, "Treat each input paragraph as a self contained test.")
 	flag.StringVar(&themeName, "theme", "", "The theme to use (overrides ~/.ttrc).")
 	flag.StringVar(&listFlag, "list", "", "-list themes prints a list of available themes.")
 
@@ -134,50 +139,63 @@ Options:`)
 		os.Exit(0)
 	}
 
+	if versionFlag {
+		fmt.Fprintf(os.Stderr, "tt version 0.2.2\n")
+		os.Exit(1)
+	}
+
+	reflow := func(s string) string {
+		sw, _ := scr.Size()
+
+		wsz := maxLineLen
+		if wsz > sw {
+			wsz = sw - 8
+		}
+
+		s = regexp.MustCompile("\\s+").ReplaceAllString(s, " ")
+		return strings.Replace(
+			wordWrap(strings.Trim(s, " "), wsz),
+			"\n", " \n", -1)
+	}
+
 	if !isatty.IsTerminal(os.Stdin.Fd()) {
 		b, err := ioutil.ReadAll(os.Stdin)
 		if err != nil {
 			panic(err)
 		}
 
+		getParagraphs := func(s string) []string {
+			s = strings.Replace(s, "\r", "", -1)
+			s = regexp.MustCompile("\n\n+").ReplaceAllString(s, "\n\n")
+			return strings.Split(strings.Trim(s, "\n"), "\n\n")
+		}
+
 		if rawMode {
-			contentFn = func(sw, sh int) []string { return []string{string(b)} }
+			testFn = func() []string { return []string{string(b)} }
+		} else if multiMode {
+			paragraphs := getParagraphs(string(b))
+			i := 0
+
+			testFn = func() []string {
+				if i < len(paragraphs) {
+					p := paragraphs[i]
+					i++
+					return []string{p}
+				} else {
+					return nil
+				}
+			}
 		} else {
-			contentFn = func(sw, sh int) []string {
-				wsz := maxLineLen
-				if wsz > sw {
-					wsz = sw - 8
-				}
-
-				s := strings.Replace(string(b), "\r", "", -1)
-				s = regexp.MustCompile("\n\n+").ReplaceAllString(s, "\n\n")
-				content := strings.Split(strings.Trim(s, "\n"), "\n\n")
-
-				for i, _ := range content {
-					content[i] = strings.Replace(wordWrap(strings.Trim(content[i], " "), wsz), "\n", " \n", -1)
-				}
-
-				return content
+			testFn = func() []string {
+				return getParagraphs(string(b))
 			}
 		}
 	} else {
-		contentFn = func(sw, sh int) []string {
-			wsz := maxLineLen
-			if wsz > sw {
-				wsz = sw - 8
-			}
-
-			if ngroups > n {
-				ngroups = n
-			}
-
+		testFn = func() []string {
 			r := make([]string, ngroups)
-			sz := n / ngroups
-			for i := 0; i < ngroups-1; i++ {
-				r[i] = randomText(sz, wsz)
+			for i := 0; i < ngroups; i++ {
+				r[i] = randomText(n)
 			}
-
-			r[ngroups-1] = randomText(sz+n%ngroups, wsz)
 
 			return r
 		}
@@ -246,6 +264,13 @@ Options:`)
 		panic(err)
 	}
 
+	defer func() {
+		if r := recover(); r != nil {
+			scr.Fini()
+			panic(r)
+		}
+	}()
+
 	typer := NewTyper(scr, fgcol, bgcol, hicol, hicol2, hicol3, errcol)
 	typer.SkipWord = !noSkip
 	typer.ShowWpm = showWpm
@@ -254,10 +279,27 @@ Options:`)
 		timeout *= 1E9
 	}
 
-	for {
-		sw, sh := scr.Size()
-		nerrs, ncorrect, t, rc := typer.Start(contentFn(sw, sh), time.Duration(timeout))
+	var showNext = true
+	var paragraphs []string
 
+	for {
+		if showNext {
+			paragraphs = testFn()
+
+			if paragraphs == nil {
+				exit(0)
+			}
+		}
+
+		if !rawMode {
+			for i, _ := range paragraphs {
+				paragraphs[i] = reflow(paragraphs[i])
+			}
+		}
+
+		nerrs, ncorrect, t, rc := typer.Start(paragraphs, time.Duration(timeout))
+
+		showNext = false
 		switch rc {
 		case TyperComplete:
 			cpm := int(float64(ncorrect) / (float64(t) / 60E9))
@@ -271,6 +313,7 @@ Options:`)
 			if oneShotMode {
 				exit(0)
 			}
+			showNext = true
 		case TyperSigInt:
 			exit(1)
 
