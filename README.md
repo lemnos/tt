@@ -38,7 +38,7 @@ Best served on a terminal with truecolor and cursor shape support (e.g kitty, it
 # Usage
 
 By default 50 words from the top 1000 words in the English language are used to
-constitute the test. Custom text can be supplied by piping aribirary text to
+constitute the test. Custom text can be supplied by piping arbitrary text to
 the program. Each paragraph in the input is shown as a separate segment of the
 text.
 
@@ -49,7 +49,7 @@ text.
 
 ## Examples
 
- - `tt -n 10` produces a test consisting of 10 randomly drawn english words
+ - `tt -n 10` produces a test consisting of 10 randomly drawn English words
  - `tt -n 50 -g 5` produces a test consisting of 50 randomly drawn words in 5 groups of 10 words each.
  - `tt -t 10` starts a timed test consisting of 50 words
  - `tt -theme gruvbox` Starts tt with the gruvbox theme
@@ -72,7 +72,7 @@ The theme can be configured by setting the following options in `~/.ttrc`:
 
 ## Recipes
 
-`tt` is designed to be easily scriptable and integrate nicely with other with
+`tt` is designed to be easily scriptable and integrate nicely with
 other *nix tools. With a little shell scripting most features the user can
 conceive of should be possible to implement. Below are some simple examples of
 what can be achieved.
