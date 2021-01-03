@@ -91,8 +91,9 @@ func main() {
 	var multiMode bool
 	var versionFlag bool
 
-	flag.IntVar(&n, "n", 50, "The number of random words which constitute a unit of the test.")
-	flag.IntVar(&ngroups, "g", 1, "The number of groups of which a test consists.")
+	flag.IntVar(&n, "n", 50, "The number of words which constitute a group.")
+	flag.IntVar(&ngroups, "g", 1, "The number of groups which constitute a generated test.")
+
 	flag.IntVar(&maxLineLen, "w", 80, "The maximum line length in characters. (ignored if -raw is present).")
 	flag.IntVar(&timeout, "t", -1, "Terminate the test after the given number of seconds.")
 
@@ -111,9 +112,10 @@ func main() {
 	flag.Usage = func() {
 		fmt.Println(`Usage: tt [options]
 
-  By default tt creates a test consisting of 50 random words. Arbitrary text
-  can also be piped directly into the program to create a custom test. Each
-  paragraph of the input is treated as a segment of the test.
+  By default tt creates a test consisting of randomly generated words from the
+  top 1000 words in the English language. Arbitrary text can also be piped
+  directly into the program to create a custom test. Each paragraph of the
+  input is treated as a segment of the test.
   
   E.G
   

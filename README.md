@@ -9,13 +9,13 @@ A terminal based typing test.
 ## Linux
 
 ```
-sudo curl -L https://github.com/lemnos/tt/releases/download/0.0.2/tt-linux -o /usr/local/bin/tt && sudo chmod +x /usr/local/bin/tt
+sudo curl -L https://github.com/lemnos/tt/releases/download/v0.2.2/tt-linux -o /usr/local/bin/tt && sudo chmod +x /usr/local/bin/tt
 ```
 
 ## OSX
 
 ```
-sudo curl -L https://github.com/lemnos/tt/releases/download/0.0.2/tt-osx -o /usr/local/bin/tt && sudo chmod +x /usr/local/bin/tt
+sudo curl -L https://github.com/lemnos/tt/releases/download/v0.2.2/tt-osx -o /usr/local/bin/tt && sudo chmod +x /usr/local/bin/tt
 ```
 
 ## Windows
