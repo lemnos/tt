@@ -3,7 +3,8 @@ all:
 install:
 	install -m755 bin/tt /usr/local/bin
 assets:
-	python3 tools/themegen.py | gofmt > generatedThemes.go 
+	python3 ./scripts/themegen.py
+	./scripts/pack themes/ words/ > packed.go
 rel:
 	GOOS=darwin GOARCH=amd64 go build -o bin/tt-osx *.go
 	GOOS=windows GOARCH=amd64 go build -o bin/tt.exe *.go

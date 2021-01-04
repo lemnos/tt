@@ -25,20 +25,26 @@ type result struct {
 	timestamp int64
 }
 
+func die(format string, args ...interface{}) {
+	scr.Fini()
+	fmt.Fprintf(os.Stderr, "ERROR: ")
+	fmt.Fprintf(os.Stderr, format, args...)
+	fmt.Fprintf(os.Stderr, "\n")
+	os.Exit(1)
+}
+
 var results []result
 
-func readConfig() map[string]string {
+func parseConfig(b []byte) map[string]string {
+	if b == nil {
+		return nil
+	}
+
 	cfg := map[string]string{}
-
-	home, _ := os.LookupEnv("HOME")
-	path := filepath.Join(home, ".ttrc")
-
-	if b, err := ioutil.ReadFile(path); err == nil {
-		for _, ln := range bytes.Split(b, []byte("\n")) {
-			a := strings.SplitN(string(ln), ":", 2)
-			if len(a) == 2 {
-				cfg[a[0]] = strings.Trim(a[1], " ")
-			}
+	for _, ln := range bytes.Split(b, []byte("\n")) {
+		a := strings.SplitN(string(ln), ":", 2)
+		if len(a) == 2 {
+			cfg[a[0]] = strings.Trim(a[1], " ")
 		}
 	}
 
@@ -74,6 +80,40 @@ func showReport(scr tcell.Screen, cpm, wpm int, accuracy float64) {
 	}
 }
 
+func createTyper(scr tcell.Screen, themeName string) *typer {
+	var theme map[string]string
+
+	if b := readResource("themes", themeName); b == nil {
+		die("%s does not appear to be a valid theme, try '-list themes' for a list of built in themes.", themeName)
+	} else {
+		theme = parseConfig(b)
+	}
+
+	var bgcol, fgcol, hicol, hicol2, hicol3, errcol tcell.Color
+	var err error
+
+	if bgcol, err = newTcellColor(theme["bgcol"]); err != nil {
+		die("bgcol is not defined and/or a valid hex colour.")
+	}
+	if fgcol, err = newTcellColor(theme["fgcol"]); err != nil {
+		die("fgcol is not defined and/or a valid hex colour.")
+	}
+	if hicol, err = newTcellColor(theme["hicol"]); err != nil {
+		die("hicol is not defined and/or a valid hex colour.")
+	}
+	if hicol2, err = newTcellColor(theme["hicol2"]); err != nil {
+		die("hicol2 is not defined and/or a valid hex colour.")
+	}
+	if hicol3, err = newTcellColor(theme["hicol3"]); err != nil {
+		die("hicol3 is not defined and/or a valid hex colour.")
+	}
+	if errcol, err = newTcellColor(theme["errcol"]); err != nil {
+		die("errcol is not defined and/or a valid hex colour.")
+	}
+
+	return NewTyper(scr, fgcol, bgcol, hicol, hicol2, hicol3, errcol)
+}
+
 func main() {
 	var n int
 	var ngroups int
@@ -85,6 +125,7 @@ func main() {
 	var noReport bool
 	var timeout int
 	var listFlag string
+	var wordList string
 	var err error
 	var themeName string
 	var showWpm bool
@@ -99,50 +140,82 @@ func main() {
 
 	flag.BoolVar(&versionFlag, "v", false, "Print the current version.")
 
+	flag.StringVar(&wordList, "words", "1000en", "The name of the word list used to generate random text.")
 	flag.BoolVar(&showWpm, "showwpm", false, "Display WPM whilst typing.")
 	flag.BoolVar(&noSkip, "noskip", false, "Disable word skipping when space is pressed.")
 	flag.BoolVar(&oneShotMode, "oneshot", false, "Automatically exit after a single run (useful for scripts).")
 	flag.BoolVar(&noReport, "noreport", false, "Don't show a report at the end of the test (useful in conjunction with -o).")
 	flag.BoolVar(&csvMode, "csv", false, "Print the test results to stdout in the form wpm,cpm,accuracy,time.")
-	flag.BoolVar(&rawMode, "raw", false, "Don't reflow text or show one paragraph at a time.")
+	flag.BoolVar(&rawMode, "raw", false, "Don't reflow text or show one paragraph at a time. (note that linebreaks are determined exclusively by the input)")
 	flag.BoolVar(&multiMode, "multi", false, "Treat each input paragraph as a self contained test.")
-	flag.StringVar(&themeName, "theme", "", "The theme to use (overrides ~/.ttrc).")
-	flag.StringVar(&listFlag, "list", "", "-list themes prints a list of available themes.")
+	flag.StringVar(&themeName, "theme", "default", "The theme to use (overrides ~/.ttrc).")
+	flag.StringVar(&listFlag, "list", "", "Lists internal resources (e.g -list themes yields a list of builtin themes)")
 
 	flag.Usage = func() {
-		fmt.Println(`Usage: tt [options]
+		fmt.Fprintf(os.Stderr, `Usage: tt [options]
 
-  By default tt creates a test consisting of randomly generated words from the
+  By default tt creates a test consisting of 50 randomly generated words from the
   top 1000 words in the English language. Arbitrary text can also be piped
   directly into the program to create a custom test. Each paragraph of the
-  input is treated as a segment of the test.
+  input is treated as a segment of the test. 
   
-  E.G
+Examples:
+
+  # Equivalent to 'tt -n 40 -words /usr/share/dict/words'
+  shuf -n 40 /usr/share/dict/words|tt
+
+  # Starts a test consisting of a random quote.
+  curl https://api.quotable.io/random|jq -r .content|tt
+
+  # Starts single a test consisting of multiple random quotes.
+  curl https://api.quotable.io/quotes|jq -r .results[].content|sort -R|sed -e 's/$/\n/'|tt
+
+  # Starts multiple tests each consisting of a random quote
+  curl https://api.quotable.io/quotes|jq -r .results[].content|sort -R|sed -e 's/$/\n/'|tt -multi
+
+
+Paths:
+
+  Some options like '-words' and '-theme' accept a path. If the given path does
+  not exist, the following directories are searched for a file with the given
+  name before falling back to the internal resource (if one exists):
   
-  shuf -n 40 /etc/dictionaries-common/words|tt
-  
-  Note that linebreaks are determined exclusively by the input if -raw is specified.
+  -words (See -list words):
+
+  ~/.tt/words/
+  /etc/tt/words/
+
+  -theme (See -list themes):
+
+  ~/.tt/themes/
+  /etc/tt/themes/
   
 Keybindings:
   <esc> Restarts the test
   <C-c> Terminates tt
   <C-backspace> Deletes the previous word
   
-Options:`)
+Options:
+`)
 
 		flag.PrintDefaults()
 	}
 	flag.Parse()
 
-	if listFlag == "themes" {
-		for t, _ := range themes {
-			fmt.Println(t)
+	if listFlag != "" {
+		prefix := listFlag + "/"
+		for path, _ := range packedFiles {
+			if strings.Index(path, prefix) == 0 {
+				_, f := filepath.Split(path)
+				fmt.Println(f)
+			}
 		}
+
 		os.Exit(0)
 	}
 
 	if versionFlag {
-		fmt.Fprintf(os.Stderr, "tt version 0.2.2\n")
+		fmt.Fprintf(os.Stderr, "tt version 0.3.0\n")
 		os.Exit(1)
 	}
 
@@ -194,66 +267,20 @@ Options:`)
 		}
 	} else {
 		testFn = func() []string {
+			var b []byte
+
+			if b = readResource("words", wordList); b == nil {
+				die("%s does not appear to be a valid word list. See '-list words' for a list of builtin word lists.", wordList)
+			}
+
+			words := regexp.MustCompile("\\s+").Split(string(b), -1)
+
 			r := make([]string, ngroups)
 			for i := 0; i < ngroups; i++ {
-				r[i] = randomText(n)
+				r[i] = randomText(n, words)
 			}
 
 			return r
-		}
-	}
-
-	cfg := readConfig()
-
-	var bgcol, fgcol, hicol, hicol2, hicol3, errcol tcell.Color
-
-	//If theme is explicitly specified as a flag
-	if themeName != "" {
-		if theme, ok := themes[themeName]; !ok {
-			fmt.Fprintf(os.Stderr, "ERROR: %s is not a valid theme (see -list themes for a list of valid options).\n", themeName)
-			os.Exit(1)
-		} else {
-			bgcol = newTcellColor(theme["bgcol"])
-			fgcol = newTcellColor(theme["fgcol"])
-			hicol = newTcellColor(theme["hicol"])
-			hicol2 = newTcellColor(theme["hicol2"])
-			hicol3 = newTcellColor(theme["hicol3"])
-			errcol = newTcellColor(theme["errcol"])
-		}
-	} else {
-		//Use the theme as a base
-		theme := themes["default"]
-		if c, ok := cfg["theme"]; ok {
-			if v, ok := themes[c]; ok {
-				theme = v
-			}
-		}
-
-		bgcol = newTcellColor(theme["bgcol"])
-		fgcol = newTcellColor(theme["fgcol"])
-		hicol = newTcellColor(theme["hicol"])
-		hicol2 = newTcellColor(theme["hicol2"])
-		hicol3 = newTcellColor(theme["hicol3"])
-		errcol = newTcellColor(theme["errcol"])
-
-		//Allow individual colours to be overriden
-		if c, ok := cfg["bgcol"]; ok {
-			bgcol = newTcellColor(c)
-		}
-		if c, ok := cfg["fgcol"]; ok {
-			fgcol = newTcellColor(c)
-		}
-		if c, ok := cfg["hicol"]; ok {
-			hicol = newTcellColor(c)
-		}
-		if c, ok := cfg["hicol2"]; ok {
-			hicol2 = newTcellColor(c)
-		}
-		if c, ok := cfg["hicol3"]; ok {
-			hicol3 = newTcellColor(c)
-		}
-		if c, ok := cfg["errcol"]; ok {
-			errcol = newTcellColor(c)
 		}
 	}
 
@@ -273,7 +300,7 @@ Options:`)
 		}
 	}()
 
-	typer := NewTyper(scr, fgcol, bgcol, hicol, hicol2, hicol3, errcol)
+	typer := createTyper(scr, themeName)
 	typer.SkipWord = !noSkip
 	typer.ShowWpm = showWpm
 

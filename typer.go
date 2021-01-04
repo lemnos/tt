@@ -148,7 +148,7 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool) 
 		if timeLimit != -1 && !startTime.IsZero() {
 			remaining := timeLimit - time.Now().Sub(startTime)
 			drawString(t.Scr, x+nc/2, y+nr+1, "      ", -1, t.backgroundStyle)
-			drawString(t.Scr, x+nc/2, y+nr+1, strconv.Itoa(int(remaining/1E9)), -1, t.backgroundStyle)
+			drawString(t.Scr, x+nc/2, y+nr+1, strconv.Itoa(int(remaining/1E9)+1), -1, t.backgroundStyle)
 		}
 
 		if t.ShowWpm && !startTime.IsZero() {

@@ -2,12 +2,26 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/gdamore/tcell"
 )
+
+var CONFIG_DIRS []string
+
+func init() {
+	home, _ := os.LookupEnv("HOME")
+
+	CONFIG_DIRS = []string{
+		filepath.Join(home, ".tt"),
+		"/etc/tt",
+	}
+}
 
 type cell struct {
 	c     rune
@@ -59,11 +73,11 @@ func init() {
 	rand.Seed(time.Now().Unix())
 }
 
-func randomText(n int) string {
+func randomText(n int, words []string) string {
 	r := ""
 
 	for i := 0; i < n; i++ {
-		r += defaultWordList[rand.Int()%len(defaultWordList)]
+		r += words[rand.Int()%len(words)]
 		if i != n-1 {
 			r += " "
 		}
@@ -163,9 +177,9 @@ func calcStringDimensions(s string) (nc, nr int) {
 	return
 }
 
-func newTcellColor(s string) tcell.Color {
+func newTcellColor(s string) (tcell.Color, error) {
 	if len(s) != 7 || s[0] != '#' {
-		panic(fmt.Errorf("%s is not a valid hex color", s))
+		return 0, fmt.Errorf("%s is not a valid hex color", s)
 	}
 
 	tonum := func(c byte) int32 {
@@ -184,5 +198,20 @@ func newTcellColor(s string) tcell.Color {
 	g := tonum(s[3])<<4 | tonum(s[4])
 	b := tonum(s[5])<<4 | tonum(s[6])
 
-	return tcell.NewRGBColor(r, g, b)
+	return tcell.NewRGBColor(r, g, b), nil
+}
+
+func readResource(typ, name string) []byte {
+
+	if b, err := ioutil.ReadFile(name); err == nil {
+		return b
+	}
+
+	for _, d := range CONFIG_DIRS {
+		if b, err := ioutil.ReadFile(filepath.Join(d, typ, name)); err == nil {
+			return b
+		}
+	}
+
+	return readPackedFile(filepath.Join(typ, name))
 }

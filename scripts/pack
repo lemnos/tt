@@ -1,0 +1,30 @@
+#!/bin/sh
+
+[ $# -gt 0 ] || { echo "Usage: $0 <path>... > packed.go"; exit 1; }
+
+cat <<!
+package main
+
+import "encoding/base64"
+
+func readPackedFile(path string) []byte {
+	if b,ok := packedFiles[path]; !ok {
+		return nil
+	} else {
+		b, err := base64.StdEncoding.DecodeString(b) 
+		if err != nil {
+			panic(err)
+		}
+
+		return b
+	}
+}
+!
+
+printf "var packedFiles = map[string]string{\n"
+find "$@" -type f|while read f; do
+	printf "\t\"$f\": \""
+	openssl base64 -A < "$f"
+	printf "\",\n"
+done
+printf "}"

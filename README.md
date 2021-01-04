@@ -9,13 +9,13 @@ A terminal based typing test.
 ## Linux
 
 ```
-sudo curl -L https://github.com/lemnos/tt/releases/download/v0.2.2/tt-linux -o /usr/local/bin/tt && sudo chmod +x /usr/local/bin/tt
+sudo curl -L https://github.com/lemnos/tt/releases/download/v0.3.0/tt-linux -o /usr/local/bin/tt && sudo chmod +x /usr/local/bin/tt
 ```
 
 ## OSX
 
 ```
-sudo curl -L https://github.com/lemnos/tt/releases/download/v0.2.2/tt-osx -o /usr/local/bin/tt && sudo chmod +x /usr/local/bin/tt
+sudo curl -L https://github.com/lemnos/tt/releases/download/v0.3.0/tt-osx -o /usr/local/bin/tt && sudo chmod +x /usr/local/bin/tt
 ```
 
 ## Windows
@@ -60,15 +60,10 @@ See `-help` for an exhaustive list of options.
 
 ## Configuration
 
-The theme can be configured by setting the following options in `~/.ttrc`:
-
- - `bgcol`:  The default background colour.
- - `fgcol`:  The default text colour.
- - `hicol`:  The colour used to highlight typed text.
- - `hicol2`  The colour used to highlight the current word.
- - `hicol3`: The colour used to highlight the next word.
- - `errcol`: The colour used to highlight errors.
- - `theme`: The theme from which default colors are drawn, a list of builtin themes can be obtained via `-list themes`.
+Custom themes and word lists can be defined in `~/.tt/themes` and `~/.tt/words`
+and used in conjunction with the `-theme` and `-words` flags. A list of
+preloaded themes and word lists can be found in `words/` and `themes/` and are
+accessible by default using the respective flags.
 
 ## Recipes
 
@@ -80,4 +75,3 @@ what can be achieved.
  - `shuf -n 40 /usr/share/dict/words|tt` Produces a test consisting of 40 random words drawn from your system's dictionary.
  - `curl http://api.quotable.io/random|jq -r .content|tt` Produces a test consisting of a random quote.
  - `alias ttd='tt -csv >> ~/wpm.csv'` Creates an alias called ttd which keeps a log of your progress in your home directory`.
-

@@ -23,13 +23,7 @@ def blend(src, dest, opacity):
     return "#%.2x%.2x%.2x" % (int(sr), int(sg), int(sb))
 
 
-print("//GENERATED CODE, DO NOT EDIT BY HAND (see themegen.py)\n\n")
-print("package main\n")
-print("var generatedThemes = map[string]map[string]string{")
-
 for name, t in themes.items():
-    print('\t"%s": map[string]string{' % name)
-
     # Meat (alter these to taste)
     mapping = {
         "bgcol": t['background'],
@@ -40,9 +34,6 @@ for name, t in themes.items():
         "errcol": t['color1'],
     }
 
+    out = open(f'themes/{name}', 'w')
     for k, v in mapping.items():
-        print('\t\t"%s": "%s",' % (k, v))
-
-    print("\t},")
-
-print("}")
+        out.write(f'{k}: {v}\n')
