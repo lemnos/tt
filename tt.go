@@ -148,7 +148,7 @@ func main() {
 	flag.BoolVar(&csvMode, "csv", false, "Print the test results to stdout in the form wpm,cpm,accuracy,time.")
 	flag.BoolVar(&rawMode, "raw", false, "Don't reflow text or show one paragraph at a time. (note that linebreaks are determined exclusively by the input)")
 	flag.BoolVar(&multiMode, "multi", false, "Treat each input paragraph as a self contained test.")
-	flag.StringVar(&themeName, "theme", "default", "The theme to use (overrides ~/.ttrc).")
+	flag.StringVar(&themeName, "theme", "default", "The theme to use.")
 	flag.StringVar(&listFlag, "list", "", "Lists internal resources (e.g -list themes yields a list of builtin themes)")
 
 	flag.Usage = func() {
