@@ -11,4 +11,5 @@ rel:
 	GOOS=darwin GOARCH=amd64 go build -o bin/tt-osx *.go
 	GOOS=windows GOARCH=amd64 go build -o bin/tt.exe *.go
 	GOOS=linux GOARCH=amd64 go build -o bin/tt-linux *.go
-	GOOS=linux GOARCH=386 go build -o bin/tt-linux_386 *.go
+	GOOS=linux GOARCH=arm go build -o bin/tt-linux_arm *.go
+	GOOS=linux GOARCH=arm64 go build -o bin/tt-linux_arm64 *.go
