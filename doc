@@ -1,0 +1,44 @@
+usage: tt [options] [file]
+
+Modes
+    -words  WORDFILE    Specifies the file from which words are randomly 
+                        generated (default: 1000en).
+    -quotes QUOTEFILE   Starts quote mode in which quotes are randomly generated 
+                        from the given file. The file should be JSON encoded and
+                        have the following form:
+
+                        [{"text": "foo", attribution: "bar"}]
+
+Word Mode
+    -n GROUPSZ          Sets the number of words which constitute a group.
+    -g NGROUPS          Sets the number of groups which constitute a test.
+
+File Mode
+    -start PARAGRAPH    The offset of the starting paragraph, set this to 0 to 
+                        reset progress on a given file.
+Aesthetics
+    -showwpm            Display WPM whilst typing.
+    -theme THEMEFILE    The theme to use. 
+    -w                  The maximum line length in characters. This option is 
+                        ignored if -raw is present.
+
+Test Parameters
+    -t SECONDS          Terminate the test after the given number of seconds.
+    -noskip             Disable word skipping when space is pressed.
+
+Scripting
+    -oneshot            Automatically exit after a single run.
+    -noreport           Don't show a report at the end of a test.
+    -csv                Print the test results to stdout in the form:
+                        [wpm],[cpm],[accuracy],[timestamp].
+    -raw                Don't reflow STDIN text or show one paragraph at a time. 
+                        Note that line breaks are determined exclusively by the 
+                        input.
+    -multi              Treat each input paragraph as a self contained test.
+
+Misc
+    -list TYPE          Lists internal resources of the given type. 
+                        TYPE=[themes|quotes|words]
+
+Version
+    -v                  Print the current version.

@@ -16,22 +16,35 @@ const (
 	TyperComplete = iota
 	TyperSigInt
 	TyperEscape
+	TyperPrevious
+	TyperNext
 	TyperResize
 )
 
+type segment struct {
+	Text        string `json:"text"`
+	Attribution string `json:"attribution"`
+}
+
+type mistake struct {
+	Word  string `json:"word"`
+	Typed string `json:"typed"`
+}
+
 type typer struct {
-	Scr      tcell.Screen
-	OnStart  func()
-	SkipWord bool
-	ShowWpm  bool
-	tty      io.Writer
+	Scr              tcell.Screen
+	OnStart          func()
+	SkipWord         bool
+	ShowWpm          bool
+	DisableBackspace bool
+	tty              io.Writer
 
 	currentWordStyle    tcell.Style
 	nextWordStyle       tcell.Style
 	incorrectSpaceStyle tcell.Style
 	incorrectStyle      tcell.Style
 	correctStyle        tcell.Style
-	backgroundStyle     tcell.Style
+	defaultStyle        tcell.Style
 }
 
 func NewTyper(scr tcell.Screen, fgcol, bgcol, hicol, hicol2, hicol3, errcol tcell.Color) *typer {
@@ -51,7 +64,7 @@ func NewTyper(scr tcell.Screen, fgcol, bgcol, hicol, hicol2, hicol3, errcol tcel
 		SkipWord: true,
 		tty:      tty,
 
-		backgroundStyle:     def,
+		defaultStyle:        def,
 		correctStyle:        def.Foreground(hicol),
 		currentWordStyle:    def.Foreground(hicol2),
 		nextWordStyle:       def.Foreground(hicol3),
@@ -60,36 +73,25 @@ func NewTyper(scr tcell.Screen, fgcol, bgcol, hicol, hicol2, hicol3, errcol tcel
 	}
 }
 
-func (t *typer) highlight(text []cell, idx int, currentWordStyle, nextWordStyle tcell.Style) {
-	for ; idx < len(text) && text[idx].c != ' ' && text[idx].c != '\n'; idx++ {
-		text[idx].style = currentWordStyle
-	}
-
-	for ; idx < len(text) && (text[idx].c == ' ' || text[idx].c == '\n'); idx++ {
-	}
-
-	for ; idx < len(text) && text[idx].c != ' ' && text[idx].c != '\n'; idx++ {
-		text[idx].style = nextWordStyle
-	}
-}
-
-func (t *typer) Start(text []string, timeout time.Duration) (nerrs, ncorrect int, duration time.Duration, rc int) {
+func (t *typer) Start(text []segment, timeout time.Duration) (nerrs, ncorrect int, duration time.Duration, rc int, mistakes []mistake) {
 	timeLeft := timeout
 
-	for i, p := range text {
+	for i, s := range text {
 		startImmediately := true
 		var d time.Duration
 		var e, c int
+		var m []mistake
 
 		if i == 0 {
 			startImmediately = false
 		}
 
-		e, c, rc, d = t.start(p, timeLeft, startImmediately)
+		e, c, rc, d, m = t.start(s.Text, timeLeft, startImmediately, s.Attribution)
 
 		nerrs += e
 		ncorrect += c
 		duration += d
+		mistakes = append(mistakes, m...)
 
 		if timeout != -1 {
 			timeLeft -= d
@@ -106,18 +108,56 @@ func (t *typer) Start(text []string, timeout time.Duration) (nerrs, ncorrect int
 	return
 }
 
-func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool) (nerrs int, ncorrect int, rc int, duration time.Duration) {
+func extractMistypedWords(text []rune, typed []rune) (mistakes []mistake) {
+	var w []rune
+	var t []rune
+	f := false
+
+	for i := range text {
+		if text[i] == ' ' {
+			if f {
+				mistakes = append(mistakes, mistake{string(w), string(t)})
+			}
+
+			w = w[:0]
+			t = t[:0]
+			f = false
+			continue
+		}
+
+		if text[i] != typed[i] {
+			f = true
+		}
+
+		if text[i] == 0 {
+			w = append(w, '_')
+		} else {
+			w = append(w, text[i])
+		}
+
+		if typed[i] == 0 {
+			t = append(t, '_')
+		} else {
+			t = append(t, typed[i])
+		}
+	}
+
+	if f {
+		mistakes = append(mistakes, mistake{string(w), string(t)})
+	}
+
+	return
+}
+
+func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, attribution string) (nerrs int, ncorrect int, rc int, duration time.Duration, mistakes []mistake) {
 	var startTime time.Time
-	text := stringToCells(s)
+	text := []rune(s)
+	typed := make([]rune, len(text))
 
 	sw, sh := scr.Size()
 	nc, nr := calcStringDimensions(s)
 	x := (sw - nc) / 2
 	y := (sh - nr) / 2
-
-	for i, _ := range text {
-		text[i].style = t.backgroundStyle
-	}
 
 	t.tty.Write([]byte("\033[5 q"))
 
@@ -125,18 +165,22 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool) 
 	//good way to save/restore the shape if the user has changed it from the otcs.
 	defer t.tty.Write([]byte("\033[2 q"))
 
-	t.Scr.SetStyle(t.backgroundStyle)
+	t.Scr.SetStyle(t.defaultStyle)
 	idx := 0
 
 	calcStats := func() {
 		nerrs = 0
 		ncorrect = 0
 
-		for _, c := range text {
-			if c.style == t.incorrectStyle || c.style == t.incorrectSpaceStyle {
-				nerrs++
-			} else if c.style == t.correctStyle {
-				ncorrect++
+		mistakes = extractMistypedWords(text[:idx], typed[:idx])
+
+		for i := 0; i < idx; i++ {
+			if text[i] != '\n' {
+				if text[i] != typed[i] {
+					nerrs++
+				} else {
+					ncorrect++
+				}
 			}
 		}
 
@@ -145,51 +189,92 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool) 
 	}
 
 	redraw := func() {
+		cx := x
+		cy := y
+		inword := -1
+
+		for i := range text {
+			style := t.defaultStyle
+
+			if text[i] == '\n' {
+				cy++
+				cx = x
+				if inword != -1 {
+					inword++
+				}
+				continue
+			}
+
+			if i == idx {
+				scr.ShowCursor(cx, cy)
+				inword = 0
+			}
+
+			if i >= idx {
+				if text[i] == ' ' {
+					inword++
+				} else if inword == 0 {
+					style = t.currentWordStyle
+				} else if inword == 1 {
+					style = t.nextWordStyle
+				} else {
+					style = t.defaultStyle
+				}
+			} else if text[i] != typed[i] {
+				if text[i] == ' ' {
+					style = t.incorrectSpaceStyle
+				} else {
+					style = t.incorrectStyle
+				}
+			} else {
+				style = t.correctStyle
+			}
+
+			scr.SetContent(cx, cy, text[i], nil, style)
+			cx++
+		}
+
+		aw, ah := calcStringDimensions(attribution)
+		drawString(t.Scr, x+nc-aw, y+nr+1, attribution, -1, t.defaultStyle)
+
 		if timeLimit != -1 && !startTime.IsZero() {
 			remaining := timeLimit - time.Now().Sub(startTime)
-			drawString(t.Scr, x+nc/2, y+nr+1, "      ", -1, t.backgroundStyle)
-			drawString(t.Scr, x+nc/2, y+nr+1, strconv.Itoa(int(remaining/1E9)+1), -1, t.backgroundStyle)
+			drawString(t.Scr, x+nc/2, y+nr+ah+1, "      ", -1, t.defaultStyle)
+			drawString(t.Scr, x+nc/2, y+nr+ah+1, strconv.Itoa(int(remaining/1E9)+1), -1, t.defaultStyle)
 		}
 
 		if t.ShowWpm && !startTime.IsZero() {
 			calcStats()
 			if duration > 1E7 { //Avoid flashing large numbers on test start.
 				wpm := int((float64(ncorrect) / 5) / (float64(duration) / 60E9))
-				drawString(t.Scr, x+nc/2-4, y-2, fmt.Sprintf("WPM: %-10d\n", wpm), -1, t.backgroundStyle)
+				drawString(t.Scr, x+nc/2-4, y-2, fmt.Sprintf("WPM: %-10d\n", wpm), -1, t.defaultStyle)
 			}
 		}
 
 		//Potentially inefficient, but seems to be good enough
 
-		drawCells(t.Scr, x, y, text, idx)
-
 		t.Scr.Show()
 	}
 
 	deleteWord := func() {
-		t.highlight(text, idx, t.backgroundStyle, t.backgroundStyle)
-
 		if idx == 0 {
 			return
 		}
 
 		idx--
 
-		for idx > 0 && (text[idx].c == ' ' || text[idx].c == '\n') {
-			text[idx].style = t.backgroundStyle
+		for idx > 0 && (text[idx] == ' ' || text[idx] == '\n') {
 			idx--
 		}
 
-		for idx > 0 && text[idx].c != ' ' && text[idx].c != '\n' {
-			text[idx].style = t.backgroundStyle
+		for idx > 0 && text[idx] != ' ' && text[idx] != '\n' {
 			idx--
 		}
 
-		if text[idx].c == ' ' || text[idx].c == '\n' {
+		if text[idx] == ' ' || text[idx] == '\n' {
+			typed[idx] = text[idx]
 			idx++
 		}
-
-		t.highlight(text, idx, t.currentWordStyle, t.nextWordStyle)
 	}
 
 	tickerCloser := make(chan bool)
@@ -217,7 +302,6 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool) 
 
 	t.Scr.Clear()
 	for {
-		t.highlight(text, idx, t.currentWordStyle, t.nextWordStyle)
 		redraw()
 
 		ev := t.Scr.PollEvent()
@@ -228,7 +312,9 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool) 
 			return
 		case *tcell.EventKey:
 			if runtime.GOOS != "windows" && ev.Key() == tcell.KeyBackspace { //Control+backspace on unix terms
-				deleteWord()
+				if !t.DisableBackspace {
+					deleteWord()
+				}
 				continue
 			}
 
@@ -247,60 +333,56 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool) 
 				return
 			case tcell.KeyCtrlL:
 				t.Scr.Sync()
+
+			case tcell.KeyRight:
+				rc = TyperNext
+				return
+
+			case tcell.KeyLeft:
+				rc = TyperPrevious
+				return
+
 			case tcell.KeyBackspace, tcell.KeyBackspace2:
-				if ev.Modifiers() == tcell.ModAlt || ev.Modifiers() == tcell.ModCtrl {
-					deleteWord()
-				} else {
-					t.highlight(text, idx, t.backgroundStyle, t.backgroundStyle)
-
-					if idx == 0 {
-						break
-					}
-
-					idx--
-
-					for idx > 0 && text[idx].c == '\n' {
-						idx--
-					}
-
-					text[idx].style = t.backgroundStyle
-
-					t.highlight(text, idx, t.currentWordStyle, t.nextWordStyle)
-				}
-			case tcell.KeyRune:
-				if idx < len(text) {
-					switch {
-					case ev.Rune() == text[idx].c:
-						text[idx].style = t.correctStyle
-						idx++
-					case ev.Rune() == ' ' && t.SkipWord:
-						if idx > 0 && text[idx-1].c == ' ' && text[idx].c != ' ' { //Do nothing on word boundaries.
+				if !t.DisableBackspace {
+					if ev.Modifiers() == tcell.ModAlt || ev.Modifiers() == tcell.ModCtrl {
+						deleteWord()
+					} else {
+						if idx == 0 {
 							break
 						}
 
-						for idx < len(text) && text[idx].c != ' ' && text[idx].c != '\n' {
-							text[idx].style = t.incorrectStyle
+						idx--
+
+						for idx > 0 && text[idx] == '\n' {
+							idx--
+						}
+					}
+				}
+			case tcell.KeyRune:
+				if idx < len(text) {
+					if t.SkipWord && ev.Rune() == ' ' {
+						if idx > 0 && text[idx-1] == ' ' && text[idx] != ' ' { //Do nothing on word boundaries.
+							break
+						}
+
+						for idx < len(text) && text[idx] != ' ' && text[idx] != '\n' {
+							typed[idx] = 0
 							idx++
 						}
 
 						if idx < len(text) {
-							text[idx].style = t.incorrectSpaceStyle
+							typed[idx] = text[idx]
 							idx++
 						}
-					default:
-						if text[idx].c == ' ' {
-							text[idx].style = t.incorrectSpaceStyle
-						} else {
-							text[idx].style = t.incorrectStyle
-						}
+					} else {
+						typed[idx] = ev.Rune()
 						idx++
 					}
 
-					for idx < len(text) && text[idx].c == '\n' {
+					for idx < len(text) && text[idx] == '\n' {
+						typed[idx] = text[idx]
 						idx++
 					}
-
-					t.highlight(text, idx, t.currentWordStyle, t.nextWordStyle)
 				}
 
 				if idx == len(text) {

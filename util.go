@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -35,6 +36,12 @@ func dbgPrintf(scr tcell.Screen, format string, args ...interface{}) {
 		}
 	}
 	drawString(scr, 0, 0, fmt.Sprintf(format, args...), -1, tcell.StyleDefault)
+}
+
+func getParagraphs(s string) []string {
+	s = strings.Replace(s, "\r", "", -1)
+	s = regexp.MustCompile("\n\n+").ReplaceAllString(s, "\n\n")
+	return strings.Split(strings.Trim(s, "\n"), "\n\n")
 }
 
 func wordWrapBytes(s []byte, n int) {
@@ -122,28 +129,6 @@ func drawString(scr tcell.Screen, x, y int, s string, cursorIdx int, style tcell
 	}
 }
 
-func drawCells(scr tcell.Screen, x, y int, s []cell, cursorIdx int) {
-	sx := x
-
-	for i, c := range s {
-		if c.c == '\n' {
-			y++
-			x = sx
-		} else {
-			scr.SetContent(x, y, c.c, nil, c.style)
-			if i == cursorIdx {
-				scr.ShowCursor(x, y)
-			}
-
-			x++
-		}
-	}
-
-	if cursorIdx == len(s) {
-		scr.ShowCursor(x, y)
-	}
-}
-
 func drawStringAtCenter(scr tcell.Screen, s string, style tcell.Style) {
 	nc, nr := calcStringDimensions(s)
 	sw, sh := scr.Size()
@@ -155,6 +140,10 @@ func drawStringAtCenter(scr tcell.Screen, s string, style tcell.Style) {
 }
 
 func calcStringDimensions(s string) (nc, nr int) {
+	if s == "" {
+		return 0, 0
+	}
+
 	c := 0
 
 	for _, x := range s {
@@ -202,6 +191,14 @@ func newTcellColor(s string) (tcell.Color, error) {
 }
 
 func readResource(typ, name string) []byte {
+	if name == "-" {
+		b, err := ioutil.ReadAll(os.Stdin)
+		if err != nil {
+			panic(err)
+		}
+
+		return b
+	}
 
 	if b, err := ioutil.ReadFile(name); err == nil {
 		return b

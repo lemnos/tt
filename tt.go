@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -17,16 +18,20 @@ import (
 
 var scr tcell.Screen
 var csvMode bool
+var jsonMode bool
 
 type result struct {
-	wpm       int
-	cpm       int
-	accuracy  float64
-	timestamp int64
+	Wpm       int       `json:"wpm"`
+	Cpm       int       `json:"cpm"`
+	Accuracy  float64   `json:"accuracy"`
+	Timestamp int64     `json:"timestamp"`
+	Mistakes  []mistake `json:"mistakes"`
 }
 
 func die(format string, args ...interface{}) {
-	scr.Fini()
+	if scr != nil {
+		scr.Fini()
+	}
 	fmt.Fprintf(os.Stderr, "ERROR: ")
 	fmt.Fprintf(os.Stderr, format, args...)
 	fmt.Fprintf(os.Stderr, "\n")
@@ -54,17 +59,50 @@ func parseConfig(b []byte) map[string]string {
 func exit(rc int) {
 	scr.Fini()
 
+	if jsonMode {
+		//Avoid null in serialized JSON.
+		for i := range results {
+			if results[i].Mistakes == nil {
+				results[i].Mistakes = []mistake{}
+			}
+		}
+
+		b, err := json.Marshal(results)
+		if err != nil {
+			panic(err)
+		}
+		os.Stdout.Write(b)
+	}
+
 	if csvMode {
 		for _, r := range results {
-			fmt.Printf("%d,%d,%.2f,%d\n", r.wpm, r.cpm, r.accuracy, r.timestamp)
+			fmt.Printf("test,%d,%d,%.2f,%d\n", r.Wpm, r.Cpm, r.Accuracy, r.Timestamp)
+			for _, m := range r.Mistakes {
+				fmt.Printf("mistake,%s,%s\n", m.Word, m.Typed)
+			}
 		}
 	}
 
 	os.Exit(rc)
 }
 
-func showReport(scr tcell.Screen, cpm, wpm int, accuracy float64) {
-	report := fmt.Sprintf("WPM: %d\nCPM: %d\nAccuracy: %.2f%%", wpm, cpm, accuracy)
+func showReport(scr tcell.Screen, cpm, wpm int, accuracy float64, attribution string, mistakes []mistake) {
+	mistakeStr := ""
+	if attribution != "" {
+		attribution = "\n\nAttribution: " + attribution
+	}
+
+	if len(mistakes) > 0 {
+		mistakeStr = "\nMistakes:    "
+		for i, m := range mistakes {
+			mistakeStr += m.Word
+			if i != len(mistakes)-1 {
+				mistakeStr += ", "
+			}
+		}
+	}
+
+	report := fmt.Sprintf("WPM:         %d\nCPM:         %d\nAccuracy:    %.2f%%%s%s", wpm, cpm, accuracy, mistakeStr, attribution)
 
 	scr.Clear()
 	drawStringAtCenter(scr, report, tcell.StyleDefault)
@@ -114,92 +152,123 @@ func createTyper(scr tcell.Screen, themeName string) *typer {
 	return NewTyper(scr, fgcol, bgcol, hicol, hicol2, hicol3, errcol)
 }
 
+var usage = `usage: tt [options] [file]
+
+Modes
+    -words  WORDFILE    Specifies the file from which words are randomly 
+                        generated (default: 1000en).
+    -quotes QUOTEFILE   Starts quote mode in which quotes are randomly generated 
+                        from the given file. The file should be JSON encoded and
+                        have the following form:
+
+                        [{"text": "foo", attribution: "bar"}]
+
+Word Mode
+    -n GROUPSZ          Sets the number of words which constitute a group.
+    -g NGROUPS          Sets the number of groups which constitute a test.
+
+File Mode
+    -start PARAGRAPH    The offset of the starting paragraph, set this to 0 to 
+                        reset progress on a given file.
+Aesthetics
+    -showwpm            Display WPM whilst typing.
+    -theme THEMEFILE    The theme to use. 
+    -w                  The maximum line length in characters. This option is 
+                        ignored if -raw is present.
+Test Parameters
+    -t SECONDS          Terminate the test after the given number of seconds.
+    -noskip             Disable word skipping when space is pressed.
+    -nobackspace        Disable the backspace key.
+    -nohighlight        Disable current and next word highlighting.
+    -highlight1         Only highlight the current word.
+    -highlight2         Only highlight the next word.
+
+Scripting
+    -oneshot            Automatically exit after a single run.
+    -noreport           Don't show a report at the end of a test.
+    -csv                Print the test results to stdout in the form:
+                        [type],[wpm],[cpm],[accuracy],[timestamp].
+    -json               Print the test output in JSON.
+    -raw                Don't reflow STDIN text or show one paragraph at a time. 
+                        Note that line breaks are determined exclusively by the 
+                        input.
+    -multi              Treat each input paragraph as a self contained test.
+
+Misc
+    -list TYPE          Lists internal resources of the given type. 
+                        TYPE=[themes|quotes|words]
+
+Version
+    -v                  Print the current version.
+`
+
+func saveMistakes(mistakes []mistake) {
+	var db []mistake
+
+	if err := readValue(MISTAKE_DB, &db); err != nil {
+		db = nil
+	}
+
+	db = append(db, mistakes...)
+	writeValue(MISTAKE_DB, db)
+}
+
 func main() {
 	var n int
-	var ngroups int
-	var testFn func() []string
+	var g int
+
 	var rawMode bool
 	var oneShotMode bool
+	var noHighlightCurrent bool
+	var noHighlightNext bool
+	var noHighlight bool
 	var maxLineLen int
 	var noSkip bool
+	var noBackspace bool
 	var noReport bool
 	var timeout int
+	var startParagraph int
+
 	var listFlag string
-	var wordList string
-	var err error
+	var wordFile string
+	var quoteFile string
+
 	var themeName string
 	var showWpm bool
 	var multiMode bool
 	var versionFlag bool
 
-	flag.IntVar(&n, "n", 50, "The number of words which constitute a group.")
-	flag.IntVar(&ngroups, "g", 1, "The number of groups which constitute a generated test.")
+	var err error
+	var testFn func() []segment
 
-	flag.IntVar(&maxLineLen, "w", 80, "The maximum line length in characters. (ignored if -raw is present).")
-	flag.IntVar(&timeout, "t", -1, "Terminate the test after the given number of seconds.")
+	flag.IntVar(&n, "n", 50, "")
+	flag.IntVar(&g, "g", 1, "")
+	flag.IntVar(&startParagraph, "start", -1, "")
 
-	flag.BoolVar(&versionFlag, "v", false, "Print the current version.")
+	flag.IntVar(&maxLineLen, "w", 80, "")
+	flag.IntVar(&timeout, "t", -1, "")
 
-	flag.StringVar(&wordList, "words", "1000en", "The name of the word list used to generate random text.")
-	flag.BoolVar(&showWpm, "showwpm", false, "Display WPM whilst typing.")
-	flag.BoolVar(&noSkip, "noskip", false, "Disable word skipping when space is pressed.")
-	flag.BoolVar(&oneShotMode, "oneshot", false, "Automatically exit after a single run (useful for scripts).")
-	flag.BoolVar(&noReport, "noreport", false, "Don't show a report at the end of the test (useful in conjunction with -o).")
-	flag.BoolVar(&csvMode, "csv", false, "Print the test results to stdout in the form wpm,cpm,accuracy,time.")
-	flag.BoolVar(&rawMode, "raw", false, "Don't reflow text or show one paragraph at a time. (note that linebreaks are determined exclusively by the input)")
-	flag.BoolVar(&multiMode, "multi", false, "Treat each input paragraph as a self contained test.")
-	flag.StringVar(&themeName, "theme", "default", "The theme to use.")
-	flag.StringVar(&listFlag, "list", "", "Lists internal resources (e.g -list themes yields a list of builtin themes)")
+	flag.BoolVar(&versionFlag, "v", false, "")
 
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, `Usage: tt [options]
+	flag.StringVar(&wordFile, "words", "", "")
+	flag.StringVar(&quoteFile, "quotes", "", "")
 
-  By default tt creates a test consisting of 50 randomly generated words from the
-  top 1000 words in the English language. Arbitrary text can also be piped
-  directly into the program to create a custom test. Each paragraph of the
-  input is treated as a segment of the test. 
-  
-Examples:
+	flag.BoolVar(&showWpm, "showwpm", false, "")
+	flag.BoolVar(&noSkip, "noskip", false, "")
+	flag.BoolVar(&noBackspace, "nobackspace", false, "")
+	flag.BoolVar(&oneShotMode, "oneshot", false, "")
+	flag.BoolVar(&noHighlight, "nohighlight", false, "")
+	flag.BoolVar(&noHighlightCurrent, "highlight2", false, "")
+	flag.BoolVar(&noHighlightNext, "highlight1", false, "")
+	flag.BoolVar(&noReport, "noreport", false, "")
+	flag.BoolVar(&csvMode, "csv", false, "")
+	flag.BoolVar(&jsonMode, "json", false, "")
+	flag.BoolVar(&rawMode, "raw", false, "")
+	flag.BoolVar(&multiMode, "multi", false, "")
+	flag.StringVar(&themeName, "theme", "default", "")
+	flag.StringVar(&listFlag, "list", "", "")
 
-  # Equivalent to 'tt -n 40 -words /usr/share/dict/words'
-  shuf -n 40 /usr/share/dict/words|tt
-
-  # Starts a test consisting of a random quote.
-  curl https://api.quotable.io/random|jq -r .content|tt
-
-  # Starts single a test consisting of multiple random quotes.
-  curl https://api.quotable.io/quotes|jq -r .results[].content|sort -R|sed -e 's/$/\n/'|tt
-
-  # Starts multiple tests each consisting of a random quote
-  curl https://api.quotable.io/quotes|jq -r .results[].content|sort -R|sed -e 's/$/\n/'|tt -multi
-
-
-Paths:
-
-  Some options like '-words' and '-theme' accept a path. If the given path does
-  not exist, the following directories are searched for a file with the given
-  name before falling back to the internal resource (if one exists):
-  
-  -words (See -list words):
-
-  ~/.tt/words/
-  /etc/tt/words/
-
-  -theme (See -list themes):
-
-  ~/.tt/themes/
-  /etc/tt/themes/
-  
-Keybindings:
-  <esc> Restarts the test
-  <C-c> Terminates tt
-  <C-backspace> Deletes the previous word
-  
-Options:
-`)
-
-		flag.PrintDefaults()
-	}
+	flag.Usage = func() { os.Stdout.Write([]byte(usage)) }
 	flag.Parse()
 
 	if listFlag != "" {
@@ -233,55 +302,23 @@ Options:
 			"\n", " \n", -1)
 	}
 
-	if !isatty.IsTerminal(os.Stdin.Fd()) {
+	switch {
+	case wordFile != "":
+		testFn = generateWordTest(wordFile, n, g)
+	case quoteFile != "":
+		testFn = generateQuoteTest(quoteFile)
+	case !isatty.IsTerminal(os.Stdin.Fd()):
 		b, err := ioutil.ReadAll(os.Stdin)
 		if err != nil {
 			panic(err)
 		}
 
-		getParagraphs := func(s string) []string {
-			s = strings.Replace(s, "\r", "", -1)
-			s = regexp.MustCompile("\n\n+").ReplaceAllString(s, "\n\n")
-			return strings.Split(strings.Trim(s, "\n"), "\n\n")
-		}
-
-		if rawMode {
-			testFn = func() []string { return []string{string(b)} }
-		} else if multiMode {
-			paragraphs := getParagraphs(string(b))
-			i := 0
-
-			testFn = func() []string {
-				if i < len(paragraphs) {
-					p := paragraphs[i]
-					i++
-					return []string{p}
-				} else {
-					return nil
-				}
-			}
-		} else {
-			testFn = func() []string {
-				return getParagraphs(string(b))
-			}
-		}
-	} else {
-		testFn = func() []string {
-			var b []byte
-
-			if b = readResource("words", wordList); b == nil {
-				die("%s does not appear to be a valid word list. See '-list words' for a list of builtin word lists.", wordList)
-			}
-
-			words := regexp.MustCompile("\\s+").Split(string(b), -1)
-
-			r := make([]string, ngroups)
-			for i := 0; i < ngroups; i++ {
-				r[i] = randomText(n, words)
-			}
-
-			return r
-		}
+		testFn = generateTestFromData(b, rawMode, multiMode)
+	case len(flag.Args()) > 0:
+		path := flag.Args()[0]
+		testFn = generateTestFromFile(path, startParagraph)
+	default:
+		testFn = generateWordTest("1000en", n, g)
 	}
 
 	scr, err = tcell.NewScreen()
@@ -301,48 +338,70 @@ Options:
 	}()
 
 	typer := createTyper(scr, themeName)
+
+	if noHighlightNext || noHighlight {
+		typer.currentWordStyle = typer.nextWordStyle
+		typer.nextWordStyle = typer.defaultStyle
+	}
+
+	if noHighlightCurrent || noHighlight {
+		typer.currentWordStyle = typer.defaultStyle
+	}
+
 	typer.SkipWord = !noSkip
+	typer.DisableBackspace = noBackspace
 	typer.ShowWpm = showWpm
 
 	if timeout != -1 {
 		timeout *= 1E9
 	}
 
-	var showNext = true
-	var paragraphs []string
+	var tests [][]segment
+	var idx = 0
 
 	for {
-		if showNext {
-			paragraphs = testFn()
+		if idx >= len(tests) {
+			tests = append(tests, testFn())
+		}
 
-			if paragraphs == nil {
-				exit(0)
-			}
+		if tests[idx] == nil {
+			exit(0)
 		}
 
 		if !rawMode {
-			for i, _ := range paragraphs {
-				paragraphs[i] = reflow(paragraphs[i])
+			for i, _ := range tests[idx] {
+				tests[idx][i].Text = reflow(tests[idx][i].Text)
 			}
 		}
 
-		nerrs, ncorrect, t, rc := typer.Start(paragraphs, time.Duration(timeout))
+		nerrs, ncorrect, t, rc, mistakes := typer.Start(tests[idx], time.Duration(timeout))
+		saveMistakes(mistakes)
 
-		showNext = false
 		switch rc {
+		case TyperNext:
+			idx++
+		case TyperPrevious:
+			if idx > 0 {
+				idx--
+			}
 		case TyperComplete:
 			cpm := int(float64(ncorrect) / (float64(t) / 60E9))
 			wpm := cpm / 5
 			accuracy := float64(ncorrect) / float64(nerrs+ncorrect) * 100
 
-			results = append(results, result{wpm, cpm, accuracy, time.Now().Unix()})
+			results = append(results, result{wpm, cpm, accuracy, time.Now().Unix(), mistakes})
 			if !noReport {
-				showReport(scr, cpm, wpm, accuracy)
+				attribution := ""
+				if len(tests[idx]) == 1 {
+					attribution = tests[idx][0].Attribution
+				}
+				showReport(scr, cpm, wpm, accuracy, attribution, mistakes)
 			}
 			if oneShotMode {
 				exit(0)
 			}
-			showNext = true
+
+			idx++
 		case TyperSigInt:
 			exit(1)
 

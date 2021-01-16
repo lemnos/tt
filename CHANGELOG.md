@@ -1,3 +1,13 @@
+# 0.4.0:
+  Too numerous to list (see the man page)
+
+  Highlights:
+  
+ - Added -quotes.
+ - Added support for navigating between tests via right/left.
+ - Now store the user's position within a file if one is specified.
+ - Improved documentation.
+
 # 0.3.0:
  - Added support for custom word lists (`-words).
  - `-theme` now accepts a path.
