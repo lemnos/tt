@@ -27,11 +27,11 @@ usage: tt \[OPTION\]... \[FILE\]
 
 -words  *WORDFILE*
 
-: Specifies the file from which words are randomly generated (default: 1000en).
+: Specifies the file from which words are randomly drawn (default: 1000en).
 
 -quotes *QUOTEFILE*
 
-: Starts quote mode in which quotes are randomly generated from the given file. The file should be JSON encoded and have the following form:
+: Starts quote mode in which quotes are randomly drawn from the given file. The file should be JSON encoded and have the following form:
 
     [{"text": "foo", attribution: "bar"}]
 

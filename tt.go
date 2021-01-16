@@ -156,8 +156,8 @@ var usage = `usage: tt [options] [file]
 
 Modes
     -words  WORDFILE    Specifies the file from which words are randomly 
-                        generated (default: 1000en).
-    -quotes QUOTEFILE   Starts quote mode in which quotes are randomly generated 
+                        drawn (default: 1000en).
+    -quotes QUOTEFILE   Starts quote mode in which quotes are randomly drawn 
                         from the given file. The file should be JSON encoded and
                         have the following form:
 
