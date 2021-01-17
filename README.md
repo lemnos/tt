@@ -27,10 +27,6 @@ git clone github.com/lemnos/tt
 make && sudo make install
 ```
 
-or
-
-`go get github.com/lemnos/tt` if you have `$GOPATH/bin` in your `$PATH`.
-
 Best served on a terminal with truecolor and cursor shape support (e.g kitty, iterm)
 
 # Usage

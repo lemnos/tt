@@ -188,7 +188,10 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 		duration = time.Now().Sub(startTime)
 	}
 
+	log, _ := os.Create("test.log")
 	redraw := func() {
+		s := time.Now()
+
 		cx := x
 		cy := y
 		inword := -1
@@ -254,6 +257,7 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 		//Potentially inefficient, but seems to be good enough
 
 		t.Scr.Show()
+		fmt.Fprintln(log, "took %d ns\n", time.Now().Sub(s))
 	}
 
 	deleteWord := func() {
