@@ -1,15 +1,22 @@
 DESTDIR :=
 PREFIX := /usr/local
 
+.PHONY: all
 all:
 	go build -o bin/tt src/*.go
+
+.PHONY: install
 install:
 	install -Dm755 bin/tt -t $(DESTDIR)$(PREFIX)/bin
 	install -Dm644 tt.1.gz -t $(DESTDIR)$(PREFIX)/share/man/man1
+
+.PHONY: assets
 assets:
 	python3 ./scripts/themegen.py
 	./scripts/pack themes/ words/ quotes/ > src/packed.go
 	pandoc -s -t man -o - man.md|gzip > tt.1.gz
+
+.PHONY: rel
 rel:
 	GOOS=darwin GOARCH=amd64 go build -o bin/tt-osx src/*.go
 	GOOS=windows GOARCH=amd64 go build -o bin/tt.exe src/*.go
