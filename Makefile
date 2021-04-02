@@ -1,8 +1,11 @@
+DESTDIR :=
+PREFIX := /usr/local
+
 all:
 	go build -o bin/tt src/*.go
 install:
-	install -m755 bin/tt /usr/local/bin
-	install -m644 tt.1.gz /usr/share/man/man1
+	install -Dm755 bin/tt -t $(DESTDIR)$(PREFIX)/bin
+	install -Dm644 tt.1.gz -t $(DESTDIR)$(PREFIX)/share/man/man1
 assets:
 	python3 ./scripts/themegen.py
 	./scripts/pack themes/ words/ quotes/ > src/packed.go
