@@ -10,6 +10,11 @@ install:
 	install -Dm755 bin/tt -t $(DESTDIR)$(PREFIX)/bin
 	install -Dm644 tt.1.gz -t $(DESTDIR)$(PREFIX)/share/man/man1
 
+.PHONY: uninstall
+uninstall:
+	rm -f $(DESTDIR)$(PREFIX)/bin/tt
+	rm -f $(DESTDIR)$(PREFIX)/share/man/man1/tt.1.gz
+
 .PHONY: assets
 assets:
 	python3 ./scripts/themegen.py
