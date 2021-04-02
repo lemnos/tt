@@ -2,7 +2,7 @@ all:
 	go build -o bin/tt src/*.go
 install:
 	install -m755 bin/tt /usr/local/bin
-	install -m755 tt.1.gz /usr/share/man/man1
+	install -m644 tt.1.gz /usr/share/man/man1
 assets:
 	python3 ./scripts/themegen.py
 	./scripts/pack themes/ words/ quotes/ > src/packed.go
