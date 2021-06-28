@@ -7,8 +7,9 @@ all:
 
 .PHONY: install
 install:
-	install -Dm755 bin/tt -t $(DESTDIR)$(PREFIX)/bin
-	install -Dm644 tt.1.gz -t $(DESTDIR)$(PREFIX)/share/man/man1
+	install -d $(DESTDIR)$(PREFIX)/{bin,share/man/man1}
+	install -m755 bin/tt $(DESTDIR)$(PREFIX)/bin
+	install -m644 tt.1.gz $(DESTDIR)$(PREFIX)/share/man/man1
 
 .PHONY: uninstall
 uninstall:
