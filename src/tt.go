@@ -184,8 +184,8 @@ Aesthetics
     -theme THEMEFILE    The theme to use. 
     -w                  The maximum line length in characters. This option is 
     -notheme            Attempt to use the default terminal theme. 
-	                    This may produce odd results depending 
-						on the theme colours.
+                        This may produce odd results depending 
+                        on the theme colours.
     -blockcursor        Use the default cursor style.
     -bold               Embolden typed text.
 
