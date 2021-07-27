@@ -9,15 +9,15 @@ A terminal based typing test.
 ## Linux
 
 ```
-sudo curl -L https://github.com/lemnos/tt/releases/download/v0.4.0/tt-linux -o /usr/local/bin/tt && sudo chmod +x /usr/local/bin/tt
-sudo curl -o /usr/share/man/man1/tt.1.gz -L https://github.com/lemnos/tt/releases/download/v0.4.0/tt.1.gz
+sudo curl -L https://github.com/lemnos/tt/releases/download/v0.4.2/tt-linux -o /usr/local/bin/tt && sudo chmod +x /usr/local/bin/tt
+sudo curl -o /usr/share/man/man1/tt.1.gz -L https://github.com/lemnos/tt/releases/download/v0.4.2/tt.1.gz
 ```
 
 ## OSX
 
 ```
-sudo curl -L https://github.com/lemnos/tt/releases/download/v0.4.0/tt-osx -o /usr/local/bin/tt && sudo chmod +x /usr/local/bin/tt
-sudo curl -o /usr/share/man/man1/tt.1.gz -L https://github.com/lemnos/tt/releases/download/v0.4.0/tt.1.gz
+sudo curl -L https://github.com/lemnos/tt/releases/download/v0.4.2/tt-osx -o /usr/local/bin/tt && sudo chmod +x /usr/local/bin/tt
+sudo curl -o /usr/share/man/man1/tt.1.gz -L https://github.com/lemnos/tt/releases/download/v0.4.2/tt.1.gz
 ```
 
 ## From source
