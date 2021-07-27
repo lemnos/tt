@@ -1,3 +1,6 @@
+# 0.4.2:
+  Added -notheme, -blockcursor and -bold.
+
 # 0.4.0:
   Too numerous to list (see the man page)
 

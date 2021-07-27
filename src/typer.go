@@ -37,6 +37,7 @@ type typer struct {
 	SkipWord         bool
 	ShowWpm          bool
 	DisableBackspace bool
+	BlockCursor      bool
 	tty              io.Writer
 
 	currentWordStyle    tcell.Style
@@ -47,7 +48,7 @@ type typer struct {
 	defaultStyle        tcell.Style
 }
 
-func NewTyper(scr tcell.Screen, fgcol, bgcol, hicol, hicol2, hicol3, errcol tcell.Color) *typer {
+func NewTyper(scr tcell.Screen, emboldenTypedText bool, fgcol, bgcol, hicol, hicol2, hicol3, errcol tcell.Color) *typer {
 	var tty io.Writer
 	def := tcell.StyleDefault.
 		Foreground(fgcol).
@@ -59,13 +60,18 @@ func NewTyper(scr tcell.Screen, fgcol, bgcol, hicol, hicol2, hicol3, errcol tcel
 		tty = ioutil.Discard
 	}
 
+	correctStyle := def.Foreground(hicol)
+	if emboldenTypedText {
+		correctStyle = correctStyle.Bold(true)
+	}
+
 	return &typer{
 		Scr:      scr,
 		SkipWord: true,
 		tty:      tty,
 
 		defaultStyle:        def,
-		correctStyle:        def.Foreground(hicol),
+		correctStyle:        correctStyle,
 		currentWordStyle:    def.Foreground(hicol2),
 		nextWordStyle:       def.Foreground(hicol3),
 		incorrectStyle:      def.Foreground(errcol),
@@ -159,11 +165,13 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 	x := (sw - nc) / 2
 	y := (sh - nr) / 2
 
-	t.tty.Write([]byte("\033[5 q"))
+	if !t.BlockCursor {
+		t.tty.Write([]byte("\033[5 q"))
 
-	//Assumes original cursor shape was a block (the one true cursor shape), there doesn't appear to be a
-	//good way to save/restore the shape if the user has changed it from the otcs.
-	defer t.tty.Write([]byte("\033[2 q"))
+		//Assumes original cursor shape was a block (the one true cursor shape), there doesn't appear to be a
+		//good way to save/restore the shape if the user has changed it from the otcs.
+		defer t.tty.Write([]byte("\033[2 q"))
+	}
 
 	t.Scr.SetStyle(t.defaultStyle)
 	idx := 0

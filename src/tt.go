@@ -118,11 +118,20 @@ func showReport(scr tcell.Screen, cpm, wpm int, accuracy float64, attribution st
 	}
 }
 
-func createTyper(scr tcell.Screen, themeName string) *typer {
+func createDefaultTyper(scr tcell.Screen) *typer {
+	return NewTyper(scr, true, tcell.ColorDefault,
+		tcell.ColorDefault,
+		tcell.ColorWhite,
+		tcell.ColorGreen,
+		tcell.ColorGreen,
+		tcell.ColorMaroon)
+}
+
+func createTyper(scr tcell.Screen, bold bool, themeName string) *typer {
 	var theme map[string]string
 
 	if b := readResource("themes", themeName); b == nil {
-		die("%s does not appear to be a valid theme, try '-list themes' for a list of built in themes.", themeName)
+		die("%s does not appear to be a valid theme, try '-list theme' for a list of built in theme.", themeName)
 	} else {
 		theme = parseConfig(b)
 	}
@@ -149,7 +158,7 @@ func createTyper(scr tcell.Screen, themeName string) *typer {
 		die("errcol is not defined and/or a valid hex colour.")
 	}
 
-	return NewTyper(scr, fgcol, bgcol, hicol, hicol2, hicol3, errcol)
+	return NewTyper(scr, bold, fgcol, bgcol, hicol, hicol2, hicol3, errcol)
 }
 
 var usage = `usage: tt [options] [file]
@@ -174,6 +183,12 @@ Aesthetics
     -showwpm            Display WPM whilst typing.
     -theme THEMEFILE    The theme to use. 
     -w                  The maximum line length in characters. This option is 
+    -notheme            Attempt to use the default terminal theme. 
+	                    This may produce odd results depending 
+						on the theme colours.
+    -blockcursor        Use the default cursor style.
+    -bold               Embolden typed text.
+
                         ignored if -raw is present.
 Test Parameters
     -t SECONDS          Terminate the test after the given number of seconds.
@@ -226,6 +241,8 @@ func main() {
 	var noSkip bool
 	var noBackspace bool
 	var noReport bool
+	var noTheme bool
+	var normalCursor bool
 	var timeout int
 	var startParagraph int
 
@@ -237,6 +254,7 @@ func main() {
 	var showWpm bool
 	var multiMode bool
 	var versionFlag bool
+	var boldFlag bool
 
 	var err error
 	var testFn func() []segment
@@ -255,12 +273,15 @@ func main() {
 
 	flag.BoolVar(&showWpm, "showwpm", false, "")
 	flag.BoolVar(&noSkip, "noskip", false, "")
+	flag.BoolVar(&normalCursor, "blockcursor", false, "")
 	flag.BoolVar(&noBackspace, "nobackspace", false, "")
+	flag.BoolVar(&noTheme, "notheme", false, "")
 	flag.BoolVar(&oneShotMode, "oneshot", false, "")
 	flag.BoolVar(&noHighlight, "nohighlight", false, "")
 	flag.BoolVar(&noHighlightCurrent, "highlight2", false, "")
 	flag.BoolVar(&noHighlightNext, "highlight1", false, "")
 	flag.BoolVar(&noReport, "noreport", false, "")
+	flag.BoolVar(&boldFlag, "bold", false, "")
 	flag.BoolVar(&csvMode, "csv", false, "")
 	flag.BoolVar(&jsonMode, "json", false, "")
 	flag.BoolVar(&rawMode, "raw", false, "")
@@ -294,8 +315,12 @@ func main() {
 	}
 
 	if versionFlag {
-		fmt.Fprintf(os.Stderr, "tt version 0.4.0\n")
+		fmt.Fprintf(os.Stderr, "tt version 0.4.2\n")
 		os.Exit(1)
+	}
+
+	if noTheme {
+		os.Setenv("TCELL_TRUECOLOR", "disable")
 	}
 
 	reflow := func(s string) string {
@@ -347,7 +372,12 @@ func main() {
 		}
 	}()
 
-	typer := createTyper(scr, themeName)
+	var typer *typer
+	if noTheme {
+		typer = createDefaultTyper(scr)
+	} else {
+		typer = createTyper(scr, boldFlag, themeName)
+	}
 
 	if noHighlightNext || noHighlight {
 		typer.currentWordStyle = typer.nextWordStyle
@@ -360,6 +390,7 @@ func main() {
 
 	typer.SkipWord = !noSkip
 	typer.DisableBackspace = noBackspace
+	typer.BlockCursor = normalCursor
 	typer.ShowWpm = showWpm
 
 	if timeout != -1 {
