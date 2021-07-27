@@ -131,7 +131,7 @@ func createTyper(scr tcell.Screen, bold bool, themeName string) *typer {
 	var theme map[string]string
 
 	if b := readResource("themes", themeName); b == nil {
-		die("%s does not appear to be a valid theme, try '-list theme' for a list of built in theme.", themeName)
+		die("%s does not appear to be a valid theme, try '-list themes' for a list of built in thems.", themeName)
 	} else {
 		theme = parseConfig(b)
 	}
