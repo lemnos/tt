@@ -23,7 +23,7 @@ sudo curl -o /usr/share/man/man1/tt.1.gz -L https://github.com/lemnos/tt/release
 ## From source
 
 ```
-git clone github.com/lemnos/tt
+git clone https://github.com/lemnos/tt
 make && sudo make install
 ```
 
