@@ -20,6 +20,12 @@ sudo curl -L https://github.com/lemnos/tt/releases/download/v0.4.2/tt-osx -o /us
 sudo curl -o /usr/share/man/man1/tt.1.gz -L https://github.com/lemnos/tt/releases/download/v0.4.2/tt.1.gz
 ```
 
+## Uninstall
+
+```
+sudo rm /usr/local/bin/tt /usr/share/man/man1/tt.1.gz
+```
+
 ## From source
 
 ```
