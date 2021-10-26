@@ -17,7 +17,7 @@ sudo curl -o /usr/share/man/man1/tt.1.gz -L https://github.com/lemnos/tt/release
 
 ```
 sudo curl -L https://github.com/lemnos/tt/releases/download/v0.4.2/tt-osx -o /usr/local/bin/tt && sudo chmod +x /usr/local/bin/tt
-sudo curl -o /usr/share/man/man1/tt.1.gz -L https://github.com/lemnos/tt/releases/download/v0.4.2/tt.1.gz
+sudo curl -o /usr/local/share/man/man1/tt.1.gz -L https://github.com/lemnos/tt/releases/download/v0.4.2/tt.1.gz
 ```
 
 ## Uninstall
