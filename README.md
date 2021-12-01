@@ -32,6 +32,7 @@ sudo rm /usr/local/bin/tt /usr/share/man/man1/tt.1.gz
 
 ```
 git clone https://github.com/lemnos/tt
+cd tt
 make && sudo make install
 ```
 
