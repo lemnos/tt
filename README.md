@@ -29,7 +29,7 @@ sudo rm /usr/local/bin/tt /usr/share/man/man1/tt.1.gz
 ## From source
 
 ```
-# dependencies
+# debian dependencies
 sudo apt install golang
 
 # clone and make
