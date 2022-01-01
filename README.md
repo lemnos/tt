@@ -31,6 +31,10 @@ sudo rm /usr/local/bin/tt /usr/share/man/man1/tt.1.gz
 ## From source
 
 ```
+# debian dependencies
+sudo apt install golang
+
+# clone and make
 git clone https://github.com/lemnos/tt
 cd tt
 make && sudo make install
