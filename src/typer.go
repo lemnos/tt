@@ -350,6 +350,11 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 				rc = TyperPrevious
 				return
 
+            case tcell.KeyCtrlW:
+                if !t.DisableBackspace {
+                    deleteWord()
+                }
+
 			case tcell.KeyBackspace, tcell.KeyBackspace2:
 				if !t.DisableBackspace {
 					if ev.Modifiers() == tcell.ModAlt || ev.Modifiers() == tcell.ModCtrl {
