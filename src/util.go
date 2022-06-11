@@ -25,7 +25,7 @@ func init() {
 }
 
 type cell struct {
-	c     rune
+	c	  rune
 	style tcell.Style
 }
 
@@ -83,8 +83,17 @@ func init() {
 func randomText(n int, words []string) string {
 	r := ""
 
+	r += words[rand.Int()%len(words)]
+	r += " "
+	var last string
 	for i := 0; i < n; i++ {
-		r += words[rand.Int()%len(words)]
+		new := words[rand.Int()%len(words)]
+		for last == new {
+			new = words[rand.Int()%len(words)]
+		}
+
+		r += new
+		last = new
 		if i != n-1 {
 			r += " "
 		}
