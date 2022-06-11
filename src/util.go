@@ -80,11 +80,23 @@ func init() {
 	rand.Seed(time.Now().Unix())
 }
 
+func lastField(r string) string {
+    ss := strings.Fields(r) // seperated string
+    return ss[len(ss) - 1] // get last word
+}
+
 func randomText(n int, words []string) string {
 	r := ""
 
-	for i := 0; i < n; i++ {
-		r += words[rand.Int()%len(words)]
+    r += words[rand.Int()%len(words)]
+    r += " "
+    for i := 0; i < n; i++ {
+        new := words[rand.Int()%len(words)]
+        for lastField(r) == new {
+            new = words[rand.Int()%len(words)]
+        }
+
+		r += new
 		if i != n-1 {
 			r += " "
 		}
