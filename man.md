@@ -60,6 +60,18 @@ usage: tt \[OPTION\]... \[FILE\]
 
 : The theme to use. 
 
+-notheme
+
+: Attempt to use the default terminal theme. This may produce odd results depending on the theme colours.
+
+-blockcursor
+
+: Use the default cursor style.
+
+-bold
+
+: Embolden typed text.
+
 -w 
 
 : The maximum line length in characters. This option is ignored if -raw is present.
