@@ -248,13 +248,13 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 		if timeLimit != -1 && !startTime.IsZero() {
 			remaining := timeLimit - time.Now().Sub(startTime)
 			drawString(t.Scr, x+nc/2, y+nr+ah+1, "      ", -1, t.defaultStyle)
-			drawString(t.Scr, x+nc/2, y+nr+ah+1, strconv.Itoa(int(remaining/1E9)+1), -1, t.defaultStyle)
+			drawString(t.Scr, x+nc/2, y+nr+ah+1, strconv.Itoa(int(remaining/1e9)+1), -1, t.defaultStyle)
 		}
 
 		if t.ShowWpm && !startTime.IsZero() {
 			calcStats()
-			if duration > 1E7 { //Avoid flashing large numbers on test start.
-				wpm := int((float64(ncorrect) / 5) / (float64(duration) / 60E9))
+			if duration > 1e7 { //Avoid flashing large numbers on test start.
+				wpm := int((float64(ncorrect) / 5) / (float64(duration) / 60e9))
 				drawString(t.Scr, x+nc/2-4, y-2, fmt.Sprintf("WPM: %-10d\n", wpm), -1, t.defaultStyle)
 			}
 		}
@@ -296,7 +296,7 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 			default:
 			}
 
-			time.Sleep(time.Duration(5E8))
+			time.Sleep(time.Duration(5e8))
 			t.Scr.PostEventWait(nil)
 		}
 	}
@@ -350,10 +350,10 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 				rc = TyperPrevious
 				return
 
-            case tcell.KeyCtrlW:
-                if !t.DisableBackspace {
-                    deleteWord()
-                }
+			case tcell.KeyCtrlW:
+				if !t.DisableBackspace {
+					deleteWord()
+				}
 
 			case tcell.KeyBackspace, tcell.KeyBackspace2:
 				if !t.DisableBackspace {
