@@ -291,16 +291,6 @@ func main() {
 	flag.Usage = func() { os.Stdout.Write([]byte(usage)) }
 	flag.Parse()
 
-	var ok bool
-	var dir string
-
-	if dir, ok = os.LookupEnv("HOME"); !ok {
-		die("Could not find home directory.")
-	}
-
-	dir = filepath.Join(dir, ".local", "share", "tt")
-	os.Mkdir(dir, 0700)
-
 	if listFlag != "" {
 		prefix := listFlag + "/"
 		for path, _ := range packedFiles {

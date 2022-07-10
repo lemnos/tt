@@ -11,12 +11,24 @@ var FILE_STATE_DB string
 var MISTAKE_DB string
 
 func init() {
-	if home, ok := os.LookupEnv("HOME"); !ok {
+	var ok bool
+	var data string
+	var home string
+
+	if home, ok = os.LookupEnv("HOME"); !ok {
 		die("Could not resolve home directory.")
-	} else {
-		FILE_STATE_DB = filepath.Join(home,  ".local/", "share/", "tt/", ".db")
-		MISTAKE_DB = filepath.Join(home, ".local/", "share/", "tt/", ".errors")
 	}
+
+	if data, ok = os.LookupEnv("XDG_DATA_HOME"); ok {
+		data = filepath.Join(data, "/tt")
+	} else {
+		data = filepath.Join(home, "/.local/share/tt")
+	}
+
+	os.MkdirAll(data, 0700)
+
+	FILE_STATE_DB = filepath.Join(data, ".db")
+	MISTAKE_DB = filepath.Join(data, ".errors")
 }
 
 func readValue(path string, o interface{}) error {
