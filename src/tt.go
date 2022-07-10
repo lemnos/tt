@@ -164,9 +164,9 @@ func createTyper(scr tcell.Screen, bold bool, themeName string) *typer {
 var usage = `usage: tt [options] [file]
 
 Modes
-    -words  WORDFILE    Specifies the file from which words are randomly 
+    -words  WORDFILE    Specifies the file from which words are randomly
                         drawn (default: 1000en).
-    -quotes QUOTEFILE   Starts quote mode in which quotes are randomly drawn 
+    -quotes QUOTEFILE   Starts quote mode in which quotes are randomly drawn
                         from the given file. The file should be JSON encoded and
                         have the following form:
 
@@ -177,7 +177,7 @@ Word Mode
     -g NGROUPS          Sets the number of groups which constitute a test.
 
 File Mode
-    -start PARAGRAPH    The offset of the starting paragraph, set this to 0 to 
+    -start PARAGRAPH    The offset of the starting paragraph, set this to 0 to
                         reset progress on a given file.
 Aesthetics
     -showwpm            Display WPM whilst typing.
@@ -188,7 +188,6 @@ Aesthetics
                         on the theme colours.
     -blockcursor        Use the default cursor style.
     -bold               Embolden typed text.
-
                         ignored if -raw is present.
 Test Parameters
     -t SECONDS          Terminate the test after the given number of seconds.
@@ -204,13 +203,13 @@ Scripting
     -csv                Print the test results to stdout in the form:
                         [type],[wpm],[cpm],[accuracy],[timestamp].
     -json               Print the test output in JSON.
-    -raw                Don't reflow STDIN text or show one paragraph at a time. 
-                        Note that line breaks are determined exclusively by the 
+    -raw                Don't reflow STDIN text or show one paragraph at a time.
+                        Note that line breaks are determined exclusively by the
                         input.
     -multi              Treat each input paragraph as a self contained test.
 
 Misc
-    -list TYPE          Lists internal resources of the given type. 
+    -list TYPE          Lists internal resources of the given type.
                         TYPE=[themes|quotes|words]
 
 Version
@@ -299,7 +298,7 @@ func main() {
 		die("Could not find home directory.")
 	}
 
-	dir = filepath.Join(dir, ".tt")
+	dir = filepath.Join(dir, ".local", "share", "tt")
 	os.Mkdir(dir, 0700)
 
 	if listFlag != "" {

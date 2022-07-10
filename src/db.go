@@ -14,8 +14,8 @@ func init() {
 	if home, ok := os.LookupEnv("HOME"); !ok {
 		die("Could not resolve home directory.")
 	} else {
-		FILE_STATE_DB = filepath.Join(home, ".tt/", ".db")
-		MISTAKE_DB = filepath.Join(home, ".tt/", ".errors")
+		FILE_STATE_DB = filepath.Join(home,  ".local/", "share/", "tt/", ".db")
+		MISTAKE_DB = filepath.Join(home, ".local/", "share/", "tt/", ".errors")
 	}
 }
 
