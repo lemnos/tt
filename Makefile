@@ -7,7 +7,8 @@ all:
 
 .PHONY: install
 install:
-	install -d $(DESTDIR)$(PREFIX)/{bin,share/man/man1}
+	install -d $(DESTDIR)$(PREFIX)/bin
+	install -d $(DESTDIR)$(PREFIX)/share/man/man1
 	install -m755 bin/tt $(DESTDIR)$(PREFIX)/bin
 	install -m644 tt.1.gz $(DESTDIR)$(PREFIX)/share/man/man1
 
