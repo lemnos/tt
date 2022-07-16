@@ -93,10 +93,10 @@ func randomText(n int, words []string) string {
         }
 
 		r += new
+		last = new
 		if i != n-1 {
 			r += " "
 		}
-		last = new
 	}
 
 	return strings.Replace(r, "\n", " \n", -1)
