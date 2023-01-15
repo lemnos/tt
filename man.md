@@ -184,7 +184,7 @@ curl https://api.quotable.io/quotes|\
 Starts a new test in a code style typing.
 
 ```bash
-curl -LsS https://raw.githubusercontent.com/lemnos/tt/master/src/tt.go | grep -v '^//\|^$' | head -n 20 | tt -raw
+curl -LsS https://raw.githubusercontent.com/lemnos/tt/master/src/tt.go | head -n 20 | tt -raw
 ```
 
 # PATHS
