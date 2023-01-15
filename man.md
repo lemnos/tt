@@ -181,6 +181,12 @@ curl https://api.quotable.io/quotes|\
     tt -quotes - -norreport -csv
 ```
 
+Starts a new test in a code style typing.
+
+```bash
+curl -LsS https://raw.githubusercontent.com/lemnos/tt/master/src/tt.go | grep -v '^//\|^$' | head -n 20 | tt -raw
+```
+
 # PATHS
 
   Some options like **-words** and **-theme** accept a path. If the given path does
