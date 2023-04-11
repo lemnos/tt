@@ -83,20 +83,19 @@ func init() {
 func randomText(n int, words []string) string {
 	r := ""
 
-	r += words[rand.Int()%len(words)]
-	r += " "
 	var last string
 	for i := 0; i < n; i++ {
-		new := words[rand.Int()%len(words)]
-		for last == new {
-			new = words[rand.Int()%len(words)]
+		w := words[rand.Int()%len(words)]
+		for last == w {
+			w = words[rand.Int()%len(words)]
 		}
 
-		r += new
-		last = new
+		r += w
 		if i != n-1 {
 			r += " "
 		}
+
+		last = w
 	}
 
 	return strings.Replace(r, "\n", " \n", -1)
