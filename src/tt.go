@@ -110,7 +110,9 @@ func showReport(scr tcell.Screen, cpm, wpm int, accuracy float64, attribution st
 	scr.Show()
 
 	for {
-		if key, ok := scr.PollEvent().(*tcell.EventKey); ok && key.Key() == tcell.KeyEscape {
+		key, ok := scr.PollEvent().(*tcell.EventKey)
+	
+		if ok && (key.Key() == tcell.KeyEscape || key.Key() == tcell.KeyEnter || key.Rune() == 32) {
 			return
 		} else if ok && key.Key() == tcell.KeyCtrlC {
 			exit(1)
