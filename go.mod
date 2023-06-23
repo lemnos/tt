@@ -4,6 +4,7 @@ go 1.17
 
 require (
 	github.com/gdamore/tcell v1.4.0
+	github.com/gerow/go-color v0.0.0-20140219113758-125d37f527f1
 	github.com/mattn/go-isatty v0.0.14
 )
 

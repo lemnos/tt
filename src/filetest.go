@@ -1,7 +1,7 @@
 package main
 
 import (
-	"io/ioutil"
+	"os"
 	"path/filepath"
 )
 
@@ -25,7 +25,7 @@ func generateTestFromFile(path string, startParagraph int) func() []segment {
 
 	idx := db[path] - 1
 
-	if b, err := ioutil.ReadFile(path); err != nil {
+	if b, err := os.ReadFile(path); err != nil {
 		die("Failed to read %s.", path)
 	} else {
 		paragraphs = getParagraphs(string(b))
@@ -40,6 +40,6 @@ func generateTestFromFile(path string, startParagraph int) func() []segment {
 			return nil
 		}
 
-		return []segment{segment{paragraphs[idx], ""}}
+		return []segment{{paragraphs[idx], "", ""}}
 	}
 }

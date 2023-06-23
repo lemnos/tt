@@ -2,7 +2,7 @@ package main
 
 func generateTestFromData(data []byte, raw bool, split bool) func() []segment {
 	if raw {
-		return func() []segment { return []segment{segment{string(data), ""}} }
+		return func() []segment { return []segment{{string(data), "", ""}} }
 	} else if split {
 		paragraphs := getParagraphs(string(data))
 		i := 0
@@ -11,7 +11,7 @@ func generateTestFromData(data []byte, raw bool, split bool) func() []segment {
 			if i < len(paragraphs) {
 				p := paragraphs[i]
 				i++
-				return []segment{segment{p, ""}}
+				return []segment{{p, "", ""}}
 			} else {
 				return nil
 			}
@@ -21,7 +21,7 @@ func generateTestFromData(data []byte, raw bool, split bool) func() []segment {
 			var segments []segment
 
 			for _, p := range getParagraphs(string(data)) {
-				segments = append(segments, segment{p, ""})
+				segments = append(segments, segment{p, "", ""})
 			}
 
 			return segments
