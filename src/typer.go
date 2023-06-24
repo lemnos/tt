@@ -313,6 +313,9 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 		redraw()
 
 		ev := t.Scr.PollEvent()
+		if ev == nil {
+			continue
+		}
 
 		switch ev := ev.(type) {
 		case *tcell.EventResize:
