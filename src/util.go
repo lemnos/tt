@@ -147,6 +147,16 @@ func drawStringAtCenter(scr tcell.Screen, s string, style tcell.Style) {
 	drawString(scr, x, y, s, -1, style)
 }
 
+func drawStringAsTitle(scr tcell.Screen, s string, style tcell.Style) {
+	nc, nr := calcStringDimensions(s)
+	sw, sh := scr.Size()
+
+	x := (sw - nc) / 2
+	y := sh - (sh - nr)
+
+	drawString(scr, x, y, s, -1, style)
+}
+
 func calcStringDimensions(s string) (nc, nr int) {
 	if s == "" {
 		return 0, 0

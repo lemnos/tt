@@ -53,6 +53,7 @@ options.
 ## Keys
 
 - Pressing `escape` at any point restarts the test.
+- `escape`, `enter`, or `space` will close the report page. If `-oneshot` is not set, the next test is loaded.
 - `C-c` exits the test.
 - `right` moves to the next test.
 - `left` moves to the previous test.

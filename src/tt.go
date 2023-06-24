@@ -86,7 +86,29 @@ func exit(rc int) {
 	os.Exit(rc)
 }
 
-func showReport(scr tcell.Screen, cpm, wpm int, accuracy float64, attribution string, mistakes []mistake) {
+func showReport(scr tcell.Screen, cpm, wpm int, accuracy float64, attribution string, mistakes []mistake, titleStyle tcell.Style) {
+	//consumes last key presses to avoid space press
+
+	scr.Clear()
+	scr.Show()
+	hold := make(chan tcell.Event)
+	go func(hold chan tcell.Event) {
+		discard := make(chan<- tcell.Event)
+		for {
+			select {
+			case discard <- scr.PollEvent():
+				{
+
+				}
+			case <-time.After(300 * time.Millisecond):
+				close(discard)
+				close(hold)
+				return
+
+			}
+		}
+	}(hold)
+	<-hold
 	mistakeStr := ""
 	if attribution != "" {
 		attribution = "\n\nAttribution: " + attribution
@@ -104,13 +126,15 @@ func showReport(scr tcell.Screen, cpm, wpm int, accuracy float64, attribution st
 
 	report := fmt.Sprintf("WPM:         %d\nCPM:         %d\nAccuracy:    %.2f%%%s%s", wpm, cpm, accuracy, mistakeStr, attribution)
 
-	scr.Clear()
 	drawStringAtCenter(scr, report, tcell.StyleDefault)
+	drawStringAsTitle(scr, "Press ESC, SPACE, or ENTER to continue.", titleStyle)
 	scr.HideCursor()
 	scr.Show()
 
 	for {
-		if key, ok := scr.PollEvent().(*tcell.EventKey); ok && key.Key() == tcell.KeyEscape {
+		key, ok := scr.PollEvent().(*tcell.EventKey)
+
+		if ok && (key.Key() == tcell.KeyEscape || key.Key() == tcell.KeyEnter || key.Rune() == 32) {
 			return
 		} else if ok && key.Key() == tcell.KeyCtrlC {
 			exit(1)
@@ -383,7 +407,7 @@ func main() {
 	typer.ShowWpm = showWpm
 
 	if timeout != -1 {
-		timeout *= 1E9
+		timeout *= 1e9
 	}
 
 	var tests [][]segment
@@ -415,7 +439,7 @@ func main() {
 				idx--
 			}
 		case TyperComplete:
-			cpm := int(float64(ncorrect) / (float64(t) / 60E9))
+			cpm := int(float64(ncorrect) / (float64(t) / 60e9))
 			wpm := cpm / 5
 			accuracy := float64(ncorrect) / float64(nerrs+ncorrect) * 100
 
@@ -425,7 +449,7 @@ func main() {
 				if len(tests[idx]) == 1 {
 					attribution = tests[idx][0].Attribution
 				}
-				showReport(scr, cpm, wpm, accuracy, attribution, mistakes)
+				showReport(scr, cpm, wpm, accuracy, attribution, mistakes, typer.nextWordStyle)
 			}
 			if oneShotMode {
 				exit(0)
