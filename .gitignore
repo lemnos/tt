@@ -3,8 +3,3 @@ bin/
 *.swn
 *.swo
 tags
-.vscode
-.gitignore
-*breakpoints.json*
-*test.json*
-.gitignore
