@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell"
+	hue "github.com/gerow/go-color"
 )
 
 var CONFIG_DIRS []string
@@ -25,17 +26,17 @@ func init() {
 }
 
 type cell struct {
-	c	  rune
+	c     rune //rendered character
 	style tcell.Style
-}
 
-func dbgPrintf(scr tcell.Screen, format string, args ...interface{}) {
-	for i := 0; i < 80; i++ {
-		for j := 0; j < 80; j++ {
-			scr.SetContent(i, j, ' ', nil, tcell.StyleDefault)
-		}
-	}
-	drawString(scr, 0, 0, fmt.Sprintf(format, args...), -1, tcell.StyleDefault)
+	ScreenPos        [2]int
+	WaitingStyle     tcell.Style
+	ComparedStyle    tcell.Style
+	WrongStyle       tcell.Style
+	CursorStyle      tcell.Style
+	AfterCursorStyle tcell.Style
+	Format           int // 0 = normal, 1 = mask
+	RubricInd        int
 }
 
 func getParagraphs(s string) []string {
@@ -44,36 +45,89 @@ func getParagraphs(s string) []string {
 	return strings.Split(strings.Trim(s, "\n"), "\n\n")
 }
 
-func wordWrapBytes(s []byte, n int) {
-	sp := 0
-	sz := 0
-
-	for i := 0; i < len(s); i++ {
-		sz++
-
-		if s[i] == '\n' {
-			s[i] = ' '
-		}
-
-		if s[i] == ' ' {
-			sp = i
-		}
-
-		if sz > n {
-			if sp != 0 {
-				s[sp] = '\n'
-			}
-
-			sz = i - sp
-		}
-	}
-
+var rawReplace map[rune][]rune = map[rune][]rune{
+	'\t': []rune("›··"),
+	'\n': []rune("↩\n"),
 }
 
-func wordWrap(s string, n int) string {
-	r := []byte(s)
-	wordWrapBytes(r, n)
+// wordWrapBytes wraps a byte slice to a given width marking the end of lines with a newline or vertical tab when raw is true
+func wordWrapBytes(s []rune, n int, isRaw bool) {
+	sp := 0  // last space
+	sz := 0  // current size of line
+	lsp := 0 // last space in line
+	lineEnd := rune('\n')
+	r := make([]rune, len(s))
+	copy(r, s)
+	s = s[:0]
+	if isRaw {
+		lineEnd = rune('\r') //group separator
+	}
+	for i := 0; i < len(r); i++ {
+		//save last space
+		if r[i] == '\n' || r[i] == '\t' || r[i] == ' ' || r[i] == '\r' {
+			sp = len(s)
+			lsp = sz
+		}
+		// add replacement if needed
+		if isRaw {
+			if r[i] == 0 {
+				continue
+			}
+			new, ok := rawReplace[r[i]]
+			if !ok {
+				s = append(s, r[i])
+				sz++
+			} else {
+				s = append(s, new...)
+				if new[len(new)-1] == '\n' {
+					sp = len(s) - 1
+					lsp = sz
+				}
+				sz += len(new)
+			}
+		} else {
+			s = append(s, r[i])
+			sz++
+		}
+		//check if we need to wrap
+		if sz > n && sp != 0 {
+			if isRaw && s[sz-1] != '\n'{
+				s = append(s[:sp+1], append([]rune{lineEnd}, s[sp+1:]...)...)
+			} else {
+				s[sp] = lineEnd
+			}
+
+			sz = sz - lsp
+		}
+	}
+}
+
+// this function changes a slice by reslicing it up to the last non \x00 character
+func sliceTrimmer(s []rune) []rune {
+	sz := len(s)
+	for i := len(s) - 1; i >= 0; i-- {
+		if s[i] != '\x00' {
+			sz = i + 1
+			break
+		}
+	}
+	return s[:sz]
+}
+
+func wordWrap(s string, wsz int) string {
+	var notRaw bool
+	r := []rune(s)
+	wordWrapBytes(r, wsz, notRaw)
 	return string(r)
+}
+
+func softWrap(s string, wsz, hsz int) string {
+	raw := true
+	var r = make([]rune, len(s)*4)
+	copy(r, []rune(s))
+	wordWrapBytes(r, wsz, raw)
+	x := string(sliceTrimmer(r))
+	return x
 }
 
 func init() {
@@ -99,20 +153,6 @@ func randomText(n int, words []string) string {
 	}
 
 	return strings.Replace(r, "\n", " \n", -1)
-}
-
-func stringToCells(s string) []cell {
-	a := make([]cell, len(s))
-	s = strings.TrimRight(s, "\n ")
-
-	len := 0
-	for _, r := range s {
-		a[len].c = r
-		a[len].style = tcell.StyleDefault
-		len++
-	}
-
-	return a[:len]
 }
 
 func drawString(scr tcell.Screen, x, y int, s string, cursorIdx int, style tcell.Style) {
@@ -147,6 +187,7 @@ func drawStringAtCenter(scr tcell.Screen, s string, style tcell.Style) {
 	drawString(scr, x, y, s, -1, style)
 }
 
+// gives boundarys of a textbox by finding max number of columns and rows in a string when rendered
 func calcStringDimensions(s string) (nc, nr int) {
 	if s == "" {
 		return 0, 0
@@ -156,6 +197,33 @@ func calcStringDimensions(s string) (nc, nr int) {
 
 	for _, x := range s {
 		if x == '\n' {
+			nr++
+			if c > nc {
+				nc = c
+			}
+			c = 0
+		} else {
+			c++
+		}
+	}
+
+	nr++
+	if c > nc {
+		nc = c
+	}
+
+	return
+}
+
+func calcStringDimensions_raw(s string) (nc, nr int) {
+	if s == "" {
+		return 0, 0
+	}
+
+	c := 0
+
+	for _, x := range s {
+		if x == '\r' || x == '\n' {
 			nr++
 			if c > nc {
 				nc = c
@@ -219,4 +287,14 @@ func readResource(typ, name string) []byte {
 	}
 
 	return readPackedFile(filepath.Join(typ, name))
+}
+
+func DimColor(color tcell.Color) tcell.Color {
+
+	r, g, b := color.RGB()
+	hsl := hue.RGB{R: float64(r), G: float64(g), B: float64(b)}.ToHSL()
+	hsl.L *= 0.5
+	hsl.S *= 0.8
+	new := hsl.ToRGB()
+	return tcell.NewRGBColor(int32(new.R), int32(new.G), int32(new.B))
 }

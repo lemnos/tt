@@ -6,7 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"runtime"
-	"strconv"
+	"sort"
 	"time"
 
 	"github.com/gdamore/tcell"
@@ -24,6 +24,22 @@ const (
 type segment struct {
 	Text        string `json:"text"`
 	Attribution string `json:"attribution"`
+	renderForm  string
+}
+
+func (s *segment) Render() string {
+	if s.renderForm == "" {
+		return s.Text
+	}
+	return s.renderForm
+}
+
+func (s *segment) SetRenderForm(form string) {
+	s.renderForm = form
+}
+
+func (s *segment) SetContent(content string) {
+	s.Text = content
 }
 
 type mistake struct {
@@ -46,6 +62,28 @@ type typer struct {
 	incorrectStyle      tcell.Style
 	correctStyle        tcell.Style
 	defaultStyle        tcell.Style
+	maskedWsStyle       tcell.Style
+	passedWsStyle       tcell.Style
+}
+
+// position key is [position in rendered text], position in textbox is an array field of cell
+type textBox map[int]cell
+
+func (txbx textBox) ShowCursor(cursor int, t *typer, rawmode bool) int {
+	var skips int
+	w, z := txbx[cursor].ScreenPos[0], txbx[cursor].ScreenPos[1]
+	if w <= 0 || z <= 0 {
+		if !rawmode && txbx[cursor].c != 0 {
+			t.Scr.HideCursor()
+		} else if rawmode && txbx[cursor].c != 0 {
+			skips += txbx.ShowCursor(cursor+1, t, rawmode)
+			return skips
+		}
+		w, z = txbx[cursor-1].ScreenPos[0], txbx[cursor-1].ScreenPos[1]
+		w++
+	}
+	t.Scr.ShowCursor(w, z)
+	return skips
 }
 
 func NewTyper(scr tcell.Screen, emboldenTypedText bool, fgcol, bgcol, hicol, hicol2, hicol3, errcol tcell.Color) *typer {
@@ -64,7 +102,9 @@ func NewTyper(scr tcell.Screen, emboldenTypedText bool, fgcol, bgcol, hicol, hic
 	if emboldenTypedText {
 		correctStyle = correctStyle.Bold(true)
 	}
-
+	_, xBg, _ := def.Decompose()
+	xFg := tcell.Color(DimColor(hicol2))
+	wsChar := def.Foreground(DimColor(xBg)).Background(bgcol)
 	return &typer{
 		Scr:      scr,
 		SkipWord: true,
@@ -76,13 +116,14 @@ func NewTyper(scr tcell.Screen, emboldenTypedText bool, fgcol, bgcol, hicol, hic
 		nextWordStyle:       def.Foreground(hicol3),
 		incorrectStyle:      def.Foreground(errcol),
 		incorrectSpaceStyle: def.Background(errcol),
+		maskedWsStyle:       def.Foreground(xFg),
+		passedWsStyle:       wsChar,
 	}
 }
 
-func (t *typer) Start(text []segment, timeout time.Duration) (nerrs, ncorrect int, duration time.Duration, rc int, mistakes []mistake) {
+func (t *typer) Start(test []segment, timeout time.Duration, rawMode bool) (nerrs, ncorrect int, duration time.Duration, rc int, mistakes []mistake) {
 	timeLeft := timeout
-
-	for i, s := range text {
+	for i, segment := range test {
 		startImmediately := true
 		var d time.Duration
 		var e, c int
@@ -92,35 +133,34 @@ func (t *typer) Start(text []segment, timeout time.Duration) (nerrs, ncorrect in
 			startImmediately = false
 		}
 
-		e, c, rc, d, m = t.start(s.Text, timeLeft, startImmediately, s.Attribution)
+		e, c, rc, d, m = t.processSegment(segment, timeLeft, startImmediately, rawMode) //errors, correct, return code, duration, mistakes
 
 		nerrs += e
 		ncorrect += c
 		duration += d
 		mistakes = append(mistakes, m...)
-
-		if timeout != -1 {
+		if timeLeft != -1 {
 			timeLeft -= d
-			if timeLeft <= 0 {
-				return
-			}
 		}
-
+		if timeLeft <= 0 && timeout > 0 {
+			break
+		}
 		if rc != TyperComplete {
 			return
 		}
 	}
-
 	return
 }
 
-func extractMistypedWords(text []rune, typed []rune) (mistakes []mistake) {
+func extractMistypedWords(text []rune, typed []rune, rawMode bool) (mistakes []mistake) {
+	mistakes = make([]mistake, 0, 20)
 	var w []rune
 	var t []rune
 	f := false
 
 	for i := range text {
-		if text[i] == ' ' {
+		if text[i] == 32 || text[i] == 10 || (rawMode && (text[i] == 32 || text[i] == 9 || text[i] == 10)) {
+			//save and reset
 			if f {
 				mistakes = append(mistakes, mistake{string(w), string(t)})
 			}
@@ -128,10 +168,13 @@ func extractMistypedWords(text []rune, typed []rune) (mistakes []mistake) {
 			w = w[:0]
 			t = t[:0]
 			f = false
-			continue
+			if !rawMode {
+				continue
+			}
 		}
-
-		if text[i] != typed[i] {
+		if text[i] != typed[i] && text[i] == 10 && typed[i] == 13 {
+			typed[i] = '\n'
+		} else if text[i] != typed[i] {
 			f = true
 		}
 
@@ -155,15 +198,19 @@ func extractMistypedWords(text []rune, typed []rune) (mistakes []mistake) {
 	return
 }
 
-func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, attribution string) (nerrs int, ncorrect int, rc int, duration time.Duration, mistakes []mistake) {
-	var startTime time.Time
-	text := []rune(s)
+func (t *typer) processSegment(excersice segment, timeLimit time.Duration, startImmediately bool, rawMode bool) (nerrs int, ncorrect int, rc int, duration time.Duration, mistakes []mistake) {
+	//attribution := excersice.Attribution
+	//remove newlines from text
+	var rubric = []rune(excersice.Text)
+	text := []rune(excersice.Render())
 	typed := make([]rune, len(text))
-
+	var startTime time.Time
 	sw, sh := scr.Size()
-	nc, nr := calcStringDimensions(s)
+	nc, nr := calcStringDimensions_raw(excersice.Render())
 	x := (sw - nc) / 2
 	y := (sh - nr) / 2
+
+	typingExrc := typeSet(text, x, y, t, rawMode) //state
 
 	if !t.BlockCursor {
 		t.tty.Write([]byte("\033[5 q"))
@@ -174,116 +221,152 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 	}
 
 	t.Scr.SetStyle(t.defaultStyle)
-	idx := 0
+
+	pointer := 0 //Tracks typed and rubric
+	cursor := 0  //Tracks display text, do not use for evaluations
 
 	calcStats := func() {
 		nerrs = 0
 		ncorrect = 0
 
-		mistakes = extractMistypedWords(text[:idx], typed[:idx])
+		mistakes = extractMistypedWords(rubric[:pointer], typed[:pointer], rawMode)
 
-		for i := 0; i < idx; i++ {
-			if text[i] != '\n' {
-				if text[i] != typed[i] {
-					nerrs++
-				} else {
-					ncorrect++
-				}
+		for iter := 0; iter < pointer; iter++ {
+			if rubric[iter] != typed[iter] {
+				nerrs++
+			} else {
+				ncorrect++
 			}
-		}
 
-		rc = TyperComplete
-		duration = time.Now().Sub(startTime)
+			if rubric[iter] != typed[iter] && rubric[iter] == '\n' && typed[iter] == '\r' {
+				nerrs--
+				ncorrect++
+			}
+
+		}
 	}
 
-	redraw := func() {
-		cx := x
-		cy := y
-		inword := -1
-
-		for i := range text {
-			style := t.defaultStyle
-
-			if text[i] == '\n' {
-				cy++
-				cx = x
-				if inword != -1 {
-					inword++
-				}
+	draw := func(txb textBox) {
+		for _, content := range txb {
+			if content.c == '\r' {
 				continue
 			}
-
-			if i == idx {
-				scr.ShowCursor(cx, cy)
-				inword = 0
-			}
-
-			if i >= idx {
-				if text[i] == ' ' {
-					inword++
-				} else if inword == 0 {
-					style = t.currentWordStyle
-				} else if inword == 1 {
-					style = t.nextWordStyle
-				} else {
-					style = t.defaultStyle
-				}
-			} else if text[i] != typed[i] {
-				if text[i] == ' ' {
-					style = t.incorrectSpaceStyle
-				} else {
-					style = t.incorrectStyle
-				}
-			} else {
-				style = t.correctStyle
-			}
-
-			scr.SetContent(cx, cy, text[i], nil, style)
-			cx++
+			t.Scr.SetContent(content.ScreenPos[0], content.ScreenPos[1], content.c, nil, content.style)
 		}
-
-		aw, ah := calcStringDimensions(attribution)
-		drawString(t.Scr, x+nc-aw, y+nr+1, attribution, -1, t.defaultStyle)
-
-		if timeLimit != -1 && !startTime.IsZero() {
-			remaining := timeLimit - time.Now().Sub(startTime)
-			drawString(t.Scr, x+nc/2, y+nr+ah+1, "      ", -1, t.defaultStyle)
-			drawString(t.Scr, x+nc/2, y+nr+ah+1, strconv.Itoa(int(remaining/1e9)+1), -1, t.defaultStyle)
-		}
-
-		if t.ShowWpm && !startTime.IsZero() {
-			calcStats()
-			if duration > 1e7 { //Avoid flashing large numbers on test start.
-				wpm := int((float64(ncorrect) / 5) / (float64(duration) / 60e9))
-				drawString(t.Scr, x+nc/2-4, y-2, fmt.Sprintf("WPM: %-10d\n", wpm), -1, t.defaultStyle)
-			}
-		}
-
-		//Potentially inefficient, but seems to be good enough
-
 		t.Scr.Show()
 	}
 
+	advance := func(ca int, r rune) { //[c]ursor [a]dvance
+		typed[pointer] = r
+		pointer++
+		cursor += ca
+
+	}
+
 	deleteWord := func() {
-		if idx == 0 {
+		if cursor == 0 {
 			return
 		}
+		cursor--
 
-		idx--
-
-		for idx > 0 && (text[idx] == ' ' || text[idx] == '\n') {
-			idx--
+		for cursor > 0 && text[cursor] != ' ' && text[cursor] != '\n' && text[cursor] != '·' && text[cursor] != '↩' && text[cursor] != '\r' {
+			cursor--
 		}
-
-		for idx > 0 && text[idx] != ' ' && text[idx] != '\n' {
-			idx--
-		}
-
-		if text[idx] == ' ' || text[idx] == '\n' {
-			typed[idx] = text[idx]
-			idx++
+		if text[cursor] == '·' || text[cursor] == '\n' {
+			cursor -= 2
 		}
 	}
+
+	redrawChanges := func() bool {
+		var ss, sa int // [s]tate [s]tyle and [s]lot [a]djustment
+		rltvPos := []int{wordBefor, wordBefor, wordBefor, currentWord, nextWord, scndWord, unstagedWord, unstagedWord}
+		//working with character windows helps
+		wbIndex := defineWindow(rubric, pointer) //wordBoundary index
+		if wbIndex[0] == -1 {
+			return true
+		}
+
+		//left truncate the relative position array to the available window
+		if len(wbIndex) < len(rltvPos) {
+			if pointer-1 < wbIndex[0] {
+				sa = 0
+				//prepend 0 to wbIndex
+				wbIndex = append(wbIndex, 0)
+				copy(wbIndex[1:], wbIndex)
+				wbIndex[0] = 0
+			} else {
+				for iter := range wbIndex {
+					if pointer <= wbIndex[iter+1] && pointer >= wbIndex[iter] {
+						sa = iter
+						break
+					}
+				}
+			}
+			rltvPos = rltvPos[3-sa:]
+		}
+
+		pos := wbIndex[0] //tracks CURSOR
+		pnt := wbIndex[0] //tracks POINTER
+		// traverse each of the word boundaries
+		// search for the current cell where cc.RubricInd == pointer
+		for i := wbIndex[0]; i < wbIndex[len(wbIndex)-1]; i++ {
+			if typingExrc[i].RubricInd == pnt {
+				pos = i
+				break
+			}
+		}
+	wb:
+		for i := range wbIndex[:len(wbIndex)-1] {
+		word:
+			for pnt >= wbIndex[i] && pnt <= wbIndex[i+1] || pos == len(text)-1 {
+				ss = rltvPos[i] //relative position of the word to the cursor
+				if ss == currentWord && pointer > pnt {
+					ss = wordBefor
+				}
+				cc := typingExrc[pos] //current cell
+				if cc.c == 0 {
+					pnt++
+					pos++
+					continue word
+				}
+				cc.stylize(ss, typed[cc.RubricInd] == rubric[cc.RubricInd])
+				typingExrc[pos] = cc // update state
+				pos++
+				if cc.Format == 0 {
+					pnt++
+					continue word
+				}
+				//when masked process accordingly depending on what symbol comes first '›' or  '↩' use a switch statements
+				switch cc.c {
+				case '›':
+					for mask := 0; mask < 2; mask++ {
+						cc := typingExrc[pos] //current cell
+						cc.stylize(ss, typed[cc.RubricInd] == rubric[cc.RubricInd])
+						typingExrc[pos] = cc // update state
+						pos++
+					}
+					if rubric[pnt] != 9 && rubric[pnt] != 10 {
+						ss++
+					} else {
+						continue wb
+					}
+
+				case '↩':
+					pnt++
+					pos++
+					ss++
+				}
+
+			}
+			if ss < 4 {
+				ss++
+			}
+		}
+		draw(typingExrc)
+		return false
+	}
+
+	///**************  MAIN EVENT LOOP  *****************///
 
 	tickerCloser := make(chan bool)
 
@@ -304,16 +387,50 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 	go ticker()
 	defer close(tickerCloser)
 
-	if startImmediately {
-		startTime = time.Now()
-	}
+	startTime = time.Now()
+	rc = TyperComplete
+	//if starttime is set, then the timer is running
+	// duration = time.Since(startTime)
 
+	//redraw function is called for every non- nil event
 	t.Scr.Clear()
+	t.Scr.ShowCursor(x, y)
+	_ = t.Scr.PollEvent() // ignores unnecessary resize event at the start
+	draw(typingExrc)
+
+	var (
+		started     bool
+		wpsTicker   *time.Ticker = time.NewTicker(time.Second * 1e9)
+		charsNow    int
+		charsBefore int
+	)
+listening:
 	for {
-		redraw()
-
 		ev := t.Scr.PollEvent()
+		if t.ShowWpm {
+			select {
+			case <-wpsTicker.C:
+				charsNow = pointer
+				charsP2S := charsNow - charsBefore
+				//wpm is calculated based on the groups of 5characters typed in 2 seconds
+				// x chars/2 seconds * 60 sec*word/5 chars*min
+				wpm := charsP2S * 6
+				drawString(t.Scr, x+nc/2-4, y-2, fmt.Sprintf("WPM: %-10d\n", wpm), -1, t.defaultStyle)
+				charsBefore = charsNow
+				continue listening
 
+			default:
+				if ev == nil {
+					continue listening
+				}
+			}
+		} else if ev == nil {
+			continue listening
+		}
+		if !started {
+			wpsTicker = time.NewTicker(time.Second * 2)
+			started = true
+		}
 		switch ev := ev.(type) {
 		case *tcell.EventResize:
 			rc = TyperResize
@@ -333,12 +450,12 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 			switch key := ev.Key(); key {
 			case tcell.KeyCtrlC:
 				rc = TyperSigInt
-
 				return
+
 			case tcell.KeyEscape:
 				rc = TyperEscape
-
 				return
+
 			case tcell.KeyCtrlL:
 				t.Scr.Sync()
 
@@ -360,56 +477,236 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 					if ev.Modifiers() == tcell.ModAlt || ev.Modifiers() == tcell.ModCtrl {
 						deleteWord()
 					} else {
-						if idx == 0 {
+						if cursor == 0 {
 							break
 						}
 
-						idx--
+						cursor--
+						pointer--
 
-						for idx > 0 && text[idx] == '\n' {
-							idx--
+						for cursor > 0 && text[cursor] == '\n' {
+							cursor--
+							pointer--
 						}
+
+						if rawMode && text[cursor] == '·' {
+							cursor -= 2
+						}
+
 					}
 				}
-			case tcell.KeyRune:
-				if idx < len(text) {
-					if t.SkipWord && ev.Rune() == ' ' {
-						if idx > 0 && text[idx-1] == ' ' && text[idx] != ' ' { //Do nothing on word boundaries.
+			case tcell.KeyRune, tcell.KeyCtrlI, tcell.KeyEnter:
+				//ignore tab and new line when not in raw mode
+				if !rawMode && (ev.Rune() == 9 || ev.Rune() == 10) {
+					continue
+				}
+				if cursor < len(text) {
+					if t.SkipWord && ev.Rune() == 32 {
+						if cursor > 0 && text[cursor-1] == 32 && text[cursor] != 32 { //Do nothing on word boundaries.
 							break
+						} else if text[cursor] == '›' {
+							advance(3, 32)
+
+						}
+						for cursor < len(text) && text[cursor] != 32 && text[cursor] != '\n' {
+							advance(1, 0)
 						}
 
-						for idx < len(text) && text[idx] != ' ' && text[idx] != '\n' {
-							typed[idx] = 0
-							idx++
-						}
-
-						if idx < len(text) {
-							typed[idx] = text[idx]
-							idx++
+						if cursor < len(text) {
+							advance(1, text[pointer])
 						}
 					} else {
-						typed[idx] = ev.Rune()
-						idx++
-					}
+						if rawMode {
+							if rubric[pointer] == 9 {
+								advance(3, 9)
+							} else if rubric[pointer] == 10 || rubric[pointer] == 13 {
+								advance(2, 10)
+							} else {
+								advance(1, ev.Rune())
+							}
 
-					for idx < len(text) && text[idx] == '\n' {
-						typed[idx] = text[idx]
-						idx++
-					}
-				}
+						} else {
+							advance(1, ev.Rune())
 
-				if idx == len(text) {
-					calcStats()
-					return
+						}
+					}
 				}
 			}
-		default: //tick
-			if timeLimit != -1 && !startTime.IsZero() && timeLimit <= time.Now().Sub(startTime) {
+
+			cursor += typingExrc.ShowCursor(cursor, t, rawMode)
+
+			fini := redrawChanges()
+			if fini {
+				duration = time.Since(startTime)
 				calcStats()
 				return
 			}
-
-			redraw()
 		}
 	}
+}
+
+func typeSet(S []rune, x, y int, t *typer, isRaw bool) textBox {
+
+	whatStyles := func(s rune) (waiting tcell.Style, compared tcell.Style, incorrect tcell.Style) {
+		switch s {
+		case '›', '·', '↩', '\n', ' ':
+			return t.maskedWsStyle, t.passedWsStyle, t.incorrectSpaceStyle
+		default:
+			return t.defaultStyle, t.correctStyle, t.incorrectStyle
+
+		}
+
+	}
+
+	whatFunction := func(s rune) int {
+		const (
+			normal int = iota
+			mask
+		)
+		switch s {
+		case '›', '·', '↩', '\n':
+			return mask
+		default:
+			return normal
+		}
+	}
+
+	var current cell
+	var r textBox = make(map[int]cell)
+	var breakchar rune
+	var cx, cy int = x, y
+	if isRaw {
+		breakchar = '\r'
+	} else {
+		breakchar = '\n'
+	}
+
+	rubricPos := 0
+	wordNum := 1
+	for iter := range S {
+		//s is prerendered and masking wont be affected
+		if S[iter] == breakchar || S[iter] == '\n' {
+			cx = x
+			cy++
+			wordNum++
+			rubricPos++
+			continue
+		} else if S[iter] == ' ' {
+			wordNum++
+		}
+
+		current.c = S[iter]
+		current.WaitingStyle, current.ComparedStyle, current.WrongStyle = whatStyles(S[iter])
+		current.CursorStyle = t.currentWordStyle
+		current.AfterCursorStyle = t.nextWordStyle
+		current.Format = whatFunction(S[iter])
+		current.ScreenPos = [2]int{cx, cy}
+		current.RubricInd = rubricPos
+		if wordNum > 4 {
+			current.stylize(unstagedWord, false)
+		} else {
+			current.stylize(wordNum, false)
+		}
+		r[iter] = current
+		cx++
+		//skips masks
+		if current.Format == 1 {
+			switch S[iter] {
+			case '›', '↩':
+				continue
+			case '·':
+				if S[iter-1] == '›' {
+					continue
+				}
+			}
+
+		}
+		rubricPos++
+
+	}
+	return r
+}
+
+// This is the simple case.
+// this includes↩\na newline and›••tabs.
+func defineWindow(rubric []rune, pointer int) (wordBoundaryIndex []int) {
+	if pointer > len(rubric)-1 {
+		return []int{-1}
+	}
+	counti := -1 //value of counts is the number of words
+	countj := -1
+	i := pointer
+	j := pointer
+	//check if previous and current cursor are word boundaries
+
+	for ; j < len(rubric)-1; j++ {
+		if runeInSlice(rubric[j], []rune{' ', '↩', '\t', '\r', '›', '\n'}) {
+			countj++
+			wordBoundaryIndex = append(wordBoundaryIndex, j)
+			if countj == 3 {
+				break
+			}
+		}
+	}
+	if i < 0 {
+		i = 0
+	}
+	wordBoundaryIndex = append(wordBoundaryIndex, j)
+	for ; i > 0; i-- {
+		if runeInSlice(rubric[i], []rune{' ', '\t', '\r', '·', '\n'}) {
+			if i > 0 && rubric[i-1] == '›' {
+				continue
+			}
+			counti++
+			wordBoundaryIndex = append(wordBoundaryIndex, i)
+			if counti == 2 {
+				break
+			}
+		}
+	}
+	if i < 0 {
+		wordBoundaryIndex = append(wordBoundaryIndex, i)
+	}
+
+	//make map with word boundaries
+	x := map[int]bool{}
+	for _, v := range wordBoundaryIndex {
+		x[v] = true
+	}
+	wordBoundaryIndex = wordBoundaryIndex[:0]
+	for k := range x {
+		wordBoundaryIndex = append(wordBoundaryIndex, k)
+	}
+	sort.Ints(wordBoundaryIndex)
+	return
+}
+
+func runeInSlice(r rune, slice []rune) bool {
+	for _, s := range slice {
+		if r == s {
+			return true
+		}
+	}
+	return false
+}
+
+const (
+	wordBefor int = iota
+	currentWord
+	nextWord
+	scndWord
+	unstagedWord
+)
+
+func (cx *cell) stylize(rltv int, correct bool) {
+	var change tcell.Style
+
+	styler := []tcell.Style{cx.ComparedStyle, cx.CursorStyle, cx.AfterCursorStyle, cx.WaitingStyle, cx.WaitingStyle}
+
+	if rltv == wordBefor && !correct {
+		change = cx.WrongStyle
+	} else {
+		change = styler[rltv]
+	}
+	cx.style = change
 }
