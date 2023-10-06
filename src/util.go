@@ -20,6 +20,7 @@ func init() {
 
 	CONFIG_DIRS = []string{
 		filepath.Join(home, ".tt"),
+		filepath.Join(home, ".config/tt"),
 		"/etc/tt",
 	}
 }
