@@ -16,7 +16,9 @@ func init() {
 	var home string
 
 	if home, ok = os.LookupEnv("HOME"); !ok {
-		die("Could not resolve home directory.")
+		if home, ok = os.LookupEnv("USERPROFILE"); !ok {
+			die("Could not resolve home directory.")
+		}
 	}
 
 	if data, ok = os.LookupEnv("XDG_DATA_HOME"); ok {
